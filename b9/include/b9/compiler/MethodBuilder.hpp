@@ -24,6 +24,10 @@ class MethodBuilder : public TR::MethodBuilder {
   MethodBuilder(VirtualMachine &virtualMachine,
                 const std::size_t functionIndex);
 
+  MethodBuilder(VirtualMachine &virtualMachine,
+                void *functionPtr,
+                std::string functionName);
+
   virtual bool buildIL();
 
  private:
@@ -149,6 +153,8 @@ class MethodBuilder : public TR::MethodBuilder {
   const GlobalTypes &globalTypes_;
   const Config &cfg_;
   const std::size_t functionIndex_;
+  const std::string functionName_;
+  void *functionPtr_;
   std::vector<std::string> params_;
   std::vector<std::string> locals_;
   int32_t maxInlineDepth_;

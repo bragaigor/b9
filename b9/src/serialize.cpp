@@ -86,6 +86,7 @@ void writeHeader(std::ostream &out) {
 }
 
 void serialize(std::ostream &out, const Module &module) {
+  // TODO: Make it look like compile.js or no?
   writeHeader(out);
   writeSections(out, module);
 }

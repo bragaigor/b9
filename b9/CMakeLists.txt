@@ -7,6 +7,7 @@ add_library(b9 SHARED
 	src/primitives.cpp
 	src/serialize.cpp
 	src/VirtualMachine.cpp
+	src/Validator.cpp
 )
 
 target_include_directories(b9

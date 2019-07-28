@@ -44,21 +44,23 @@ void readString(std::istream &in, std::string &toRead) {
   }
 }
 
-void readStringSection(std::istream &in, std::vector<std::string> &strings);
+void readStringSection(std::istream &in, std::vector<std::string> &strings, std::shared_ptr<ModuleMmap> &module);
 
-bool readInstructions(std::istream &in, std::vector<Instruction> &instructions);
+bool readInstructions(std::istream &in, std::vector<Instruction> &instructions, std::shared_ptr<ModuleMmap> &module);
 
-void readFunctionData(std::istream &in, FunctionDef &functionSpec);
+void readFunctionData(std::istream &in, FunctionDef &functionSpec, std::shared_ptr<ModuleMmap> &module);
 
 void readFunction(std::istream &in, FunctionDef &functionDef);
 
-void readFunctionSection(std::istream &in, std::vector<FunctionDef> &functions);
+void readFunctionSection(std::istream &in, std::vector<FunctionDef> &functions, std::shared_ptr<ModuleMmap> &module);
 
 void readSection(std::istream &in, std::shared_ptr<Module> &module);
 
+// void readModuleSize(std::istream &in);
+
 void readHeader(std::istream &in, char *buffer);
 
-std::shared_ptr<Module> deserialize(std::istream &in);
+std::shared_ptr<Module> deserialize(std::istream &in, std::shared_ptr<ModuleMmap> &module); // TODO: Get rid of extra argument and return proper module
 
 }  // namespace b9
 

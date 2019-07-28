@@ -70,7 +70,7 @@ class VirtualMachine {
   ~VirtualMachine() noexcept;
 
   /// Load a module into the VM.
-  void load(std::shared_ptr<const Module> module);
+  void load(std::shared_ptr<const Module> module, std::shared_ptr<ModuleMmap> moduleMmap);
 
   StackElement run(const std::size_t index,
                    const std::vector<StackElement> &usrArgs);
@@ -80,11 +80,21 @@ class VirtualMachine {
 
   const FunctionDef *getFunction(std::size_t index);
 
+  void *getFunction(const std::string name);
+
+  std::uint32_t getNextInt32();
+
+  std::uint32_t *getCurrentInstruction();
+
   PrimitiveFunction *getPrimitive(std::size_t index);
 
   JitFunction getJitAddress(std::size_t functionIndex);
 
+  JitFunction getJitAddress(std::string functionName);
+
   void setJitAddress(std::size_t functionIndex, JitFunction value);
+
+  void setJitAddress(std::string functionName, JitFunction value);
 
   std::size_t getFunctionCount();
 
@@ -111,8 +121,10 @@ class VirtualMachine {
   Config cfg_;
   Om::MemorySystem memoryManager_;
   std::shared_ptr<Compiler> compiler_;
-  std::shared_ptr<const Module> module_;
-  std::vector<JitFunction> compiledFunctions_;
+  std::shared_ptr<ModuleMmap> moduleMmap_; // TODO: Use this instead 
+  std::shared_ptr<const Module> module_; // TODO: WE shouldn't need this with mmap...
+  std::vector<JitFunction> compiledFunctions_; // TODO: Change to HashMap key: func name, value: JitFunction
+  std::unordered_map<std::string, JitFunction> compiledFunctionsStr_;
 };
 
 }  // namespace b9

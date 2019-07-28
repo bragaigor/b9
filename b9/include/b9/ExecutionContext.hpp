@@ -14,6 +14,8 @@ class ExecutionContext {
 
   StackElement interpret(std::size_t functionIndex);
 
+  StackElement interpret(std::string functionName);
+
   void reset();
 
   StackElement pop();

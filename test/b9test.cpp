@@ -44,6 +44,8 @@ const std::vector<const char*> TEST_NAMES = {
 };
 // clang-format on
 
+std::shared_ptr<ModuleMmap> _moduleMmap;
+
 Om::ProcessRuntime runtime;
 
 class InterpreterTest : public ::testing::Test {
@@ -56,7 +58,7 @@ class InterpreterTest : public ::testing::Test {
 
     std::ifstream file(moduleName, std::ios_base::in | std::ios_base::binary);
 
-    module_ = b9::deserialize(file);
+    module_ = b9::deserialize(file, _moduleMmap);
   }
 };
 
@@ -64,7 +66,7 @@ TEST_F(InterpreterTest, interpreter) {
   Config cfg;
 
   VirtualMachine vm{runtime, cfg};
-  vm.load(module_);
+  vm.load(module_, _moduleMmap);
 
   for (auto test : TEST_NAMES) {
     EXPECT_TRUE(vm.run(test, {}).getInt48()) << "Test Failed: " << test;
@@ -76,7 +78,7 @@ TEST_F(InterpreterTest, jit) {
   cfg.jit = true;
 
   VirtualMachine vm{runtime, cfg};
-  vm.load(module_);
+  vm.load(module_, _moduleMmap);
   vm.generateAllCode();
 
   for (auto test : TEST_NAMES) {
@@ -90,7 +92,7 @@ TEST_F(InterpreterTest, jit_dc) {
   cfg.directCall = true;
 
   VirtualMachine vm{runtime, cfg};
-  vm.load(module_);
+  vm.load(module_, _moduleMmap);
   vm.generateAllCode();
 
   for (auto test : TEST_NAMES) {
@@ -105,7 +107,7 @@ TEST_F(InterpreterTest, jit_pp) {
   cfg.passParam = true;
 
   VirtualMachine vm{runtime, cfg};
-  vm.load(module_);
+  vm.load(module_, _moduleMmap);
   vm.generateAllCode();
 
   for (auto test : TEST_NAMES) {
@@ -121,7 +123,7 @@ TEST_F(InterpreterTest, jit_lvms) {
   cfg.lazyVmState = true;
 
   VirtualMachine vm{runtime, cfg};
-  vm.load(module_);
+  vm.load(module_, _moduleMmap);
   vm.generateAllCode();
 
   for (auto test : TEST_NAMES) {
@@ -140,7 +142,7 @@ TEST(MyTest, arguments) {
                                 {OpCode::FUNCTION_RETURN},
                                 END_SECTION};
   m->functions.push_back(b9::FunctionDef{"add_args", i, 2, 0});
-  vm.load(m);
+  vm.load(m, _moduleMmap);
   auto r = vm.run("add_args", {{AS_INT48, 1}, {AS_INT48, 2}});
   EXPECT_EQ(r, Value(AS_INT48, 3));
 }
@@ -154,7 +156,7 @@ TEST(MyTest, jitSimpleProgram) {
                                 {OpCode::FUNCTION_RETURN},
                                 END_SECTION};
   m->functions.push_back(b9::FunctionDef{"add", i, 0, 0});
-  vm.load(m);
+  vm.load(m, _moduleMmap);
   vm.generateAllCode();
   auto r = vm.run("add", {});
   EXPECT_EQ(r, Value(AS_INT48, 0xdead));
@@ -169,7 +171,7 @@ TEST(MyTest, haveAVariable) {
                                 {OpCode::FUNCTION_RETURN},
                                 END_SECTION};
   m->functions.push_back(b9::FunctionDef{"add", i, 0, 0});
-  vm.load(m);
+  vm.load(m, _moduleMmap);
   vm.generateAllCode();
   auto r = vm.run("add", {});
   EXPECT_EQ(r, Value(AS_INT48, 0xdead));
@@ -192,7 +194,7 @@ TEST(ObjectTest, allocateSomething) {
       END_SECTION};
   m->strings.push_back("Hello, World");
   m->functions.push_back(b9::FunctionDef{"allocate_object", i, 0, 1});
-  vm.load(m);
+  vm.load(m, _moduleMmap);
   Value r = vm.run("allocate_object", {});
   EXPECT_EQ(r, Value(AS_INT48, 0));
 }

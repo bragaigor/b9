@@ -1,6 +1,7 @@
 #include <b9/ExecutionContext.hpp>
 #include <b9/compiler/Compiler.hpp>
 #include <b9/deserialize.hpp>
+#include <b9/Validator.hpp>
 
 #include <OMR/Om/Context.inl.hpp>
 #include <OMR/Om/MemorySystem.hpp>
@@ -28,15 +29,6 @@ static const char* usage =
     "  -debug:        Enable debug code\n"
     "  -verbose:      Run with verbose printing\n"
     "  -help:         Print this help message";
-
-/// The b9run program's global configuration.
-struct RunConfig {
-  b9::Config b9;
-  const char* moduleName = "";
-  const char* mainFunction = "<script>";
-  bool verbose = false;
-  std::vector<b9::StackElement> usrArgs;
-};
 
 std::ostream& operator<<(std::ostream& out, const RunConfig& cfg) {
   out << "Module:       " << cfg.moduleName << std::endl;
@@ -121,15 +113,21 @@ static void run(Om::ProcessRuntime& runtime, const RunConfig& cfg) {
   b9::VirtualMachine vm{runtime, cfg.b9};
 
   std::ifstream file(cfg.moduleName, std::ios_base::in | std::ios_base::binary);
-  auto module = b9::deserialize(file);
-  vm.load(module);
+  std::ifstream file_temp(cfg.moduleName, std::ios_base::binary | std::ios_base::ate); // TODO: Is this worth it to grab file size?
+  std::shared_ptr<ModuleMmap> moduleMmap;
+  auto module = b9::deserialize(file, moduleMmap);
+  std::cout << "\tFile read has size: " << file_temp.tellg() << std::endl;
+  vm.load(module, moduleMmap);
 
   if (cfg.b9.jit) {
     vm.generateAllCode();
   }
 
+  std::cout << "\tNumber of functions from new module: " << moduleMmap->getNumberOfFunctions() << std::endl;
+
   size_t functionIndex = module->getFunctionIndex(cfg.mainFunction);
-  auto result = vm.run(functionIndex, cfg.usrArgs);
+  // auto result = vm.run(functionIndex, cfg.usrArgs);
+  auto result = vm.run(cfg.mainFunction, cfg.usrArgs);
   std::cout << std::endl << "=> " << result << std::endl;
 }
 
@@ -144,7 +142,18 @@ int main(int argc, char* argv[]) {
 
   if (cfg.verbose) {
     std::cout << cfg << std::endl << std::endl;
+    std::cout << "Validating bytecodes..." << std::endl;
   }
+
+  // Validator validator{cfg};
+  // if (!validator.validate()) {
+  //   std::cerr << "Bytecodes failed validation. Exiting..." << std::endl;
+  //   exit(EXIT_FAILURE);
+  // } else {
+  //     if (cfg.verbose) {
+  //     std::cout << "Bytecodes validated succcessfully." << std::endl;
+  //   }
+  // }
 
   try {
     run(runtime, cfg);

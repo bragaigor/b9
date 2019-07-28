@@ -32,6 +32,7 @@ class Compiler {
  public:
   Compiler(VirtualMachine &virtualMachine, const Config &cfg);
   JitFunction generateCode(const std::size_t functionIndex);
+  JitFunction generateCode(const std::string functionName);
 
   const GlobalTypes &globalTypes() const { return globalTypes_; }
 

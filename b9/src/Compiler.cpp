@@ -88,4 +88,28 @@ JitFunction Compiler::generateCode(const std::size_t functionIndex) {
   return (JitFunction)result;
 }
 
+JitFunction Compiler::generateCode(const std::string functionName) {
+  void *functionPtr = virtualMachine_.getFunction(functionName);
+  MethodBuilder methodBuilder(virtualMachine_, functionPtr, functionName);
+
+  if (cfg_.verbose)
+    std::cout << "MethodBuilder for function: " << functionName
+              << " is constructed" << std::endl;
+
+  uint8_t *result = nullptr;
+  auto rc = compileMethodBuilder(&methodBuilder, &result);
+
+  if (rc != 0) {
+    std::cout << "Failed to compile function: " << functionName
+              << " nparams: " << "TODO CHANGE THIS TO nparams" << std::endl;
+    throw b9::CompilationException{"IL generation failed"};
+  }
+
+  if (cfg_.verbose)
+    std::cout << "Compilation completed with return code: " << rc
+              << ", code address: " << static_cast<void *>(result) << std::endl;
+
+  return (JitFunction)result;
+}
+
 }  // namespace b9

@@ -8,6 +8,8 @@ namespace b9 {
 
 using RawOpCode = std::uint8_t;
 
+#define INSTRUCTION_SIZE sizeof(std::uint32_t)
+
 enum class OpCode : RawOpCode {
 
   // Generic ByteCodes

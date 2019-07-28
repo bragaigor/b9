@@ -10,7 +10,7 @@
 
 namespace b9 {
 
-void readStringSection(std::istream &in, std::vector<std::string> &strings) {
+void readStringSection(std::istream &in, std::vector<std::string> &strings, std::shared_ptr<ModuleMmap> &moduleMmap) {
   uint32_t stringCount;
   if (!readNumber(in, stringCount)) {
     throw DeserializeException{"Error reading string count"};
@@ -19,50 +19,63 @@ void readStringSection(std::istream &in, std::vector<std::string> &strings) {
     std::string toRead;
     readString(in, toRead);
     strings.push_back(toRead);
+    moduleMmap->insertString(toRead);
   }
 }
 
 bool readInstructions(std::istream &in,
-                      std::vector<Instruction> &instructions) {
+                      std::vector<Instruction> &instructions,
+                      std::shared_ptr<ModuleMmap> &moduleMmap) {
   do {
     RawInstruction instruction;
     if (!readNumber(in, instruction)) {
       return false;
     }
+
+    moduleMmap->insertInstruction(instruction);
+
     instructions.emplace_back(instruction);
   } while (instructions.back() != END_SECTION);
   return true;
 }
 
-void readFunctionData(std::istream &in, FunctionDef &functionDef) {
-  readString(in, functionDef.name);
+void readFunctionData(std::istream &in, FunctionDef &functionDef, std::shared_ptr<ModuleMmap> &moduleMmap) {
+  std::string temp;
+  readString(in, temp);
+  functionDef.name = temp;
+  moduleMmap->insertNewFunc(temp);
   bool ok = readNumber(in, functionDef.nparams) &&
             readNumber(in, functionDef.nlocals);
+
+  moduleMmap->insertParams(functionDef.nparams, functionDef.nlocals);
+
   if (!ok) {
     throw DeserializeException{"Error reading function data"};
   }
 }
 
-void readFunction(std::istream &in, FunctionDef &functionDef) {
-  readFunctionData(in, functionDef);
-  if (!readInstructions(in, functionDef.instructions)) {
+void readFunction(std::istream &in, FunctionDef &functionDef, std::shared_ptr<ModuleMmap> &moduleMmap) {
+  readFunctionData(in, functionDef, moduleMmap);
+  if (!readInstructions(in, functionDef.instructions, moduleMmap)) {
     throw DeserializeException{"Error reading instructions"};
   }
 }
 
 void readFunctionSection(std::istream &in,
-                         std::vector<FunctionDef> &functions) {
+                         std::vector<FunctionDef> &functions,
+                         std::shared_ptr<ModuleMmap> &moduleMmap) {
   uint32_t functionCount;
   if (!readNumber(in, functionCount)) {
     throw DeserializeException{"Error reading function count"};
   }
   for (uint32_t i = 0; i < functionCount; i++) {
+    // TODO: Figure out a way to store FunctionDef in memory reserved by mmap
     functions.emplace_back(FunctionDef{"", std::vector<Instruction>{}, 0, 0});
-    readFunction(in, functions.back());
+    readFunction(in, functions.back(), moduleMmap);
   }
 }
 
-void readSection(std::istream &in, std::shared_ptr<Module> &module) {
+void readSection(std::istream &in, std::shared_ptr<Module> &module, std::shared_ptr<ModuleMmap> &moduleMmap) {
   uint32_t sectionCode;
   if (!readNumber(in, sectionCode)) {
     throw DeserializeException{"Error reading section code"};
@@ -70,12 +83,27 @@ void readSection(std::istream &in, std::shared_ptr<Module> &module) {
 
   switch (sectionCode) {
     case 1:
-      return readFunctionSection(in, module->functions);
+      return readFunctionSection(in, module->functions, moduleMmap);
     case 2:
-      return readStringSection(in, module->strings);
+      return readStringSection(in, module->strings, moduleMmap);
     default:
       throw DeserializeException{"Invalid Section Code"};
   }
+}
+
+std::uint32_t readModuleSize(std::istream &in) {
+  if (in.peek() == std::istream::traits_type::eof()) {
+    throw DeserializeException{"Empty Input File"};
+  }
+
+  std::uint32_t moduleSize;
+  if (!readNumber(in, moduleSize)) {
+    throw DeserializeException{"Error reading section code"};
+  }
+
+  std::cout << "From the deserializer: number read was " << moduleSize << std::endl;
+
+  return moduleSize;
 }
 
 void readHeader(std::istream &in) {
@@ -93,12 +121,18 @@ void readHeader(std::istream &in) {
   }
 }
 
-std::shared_ptr<Module> deserialize(std::istream &in) {
+std::shared_ptr<Module> deserialize(std::istream &in, std::shared_ptr<ModuleMmap> &moduleMmap) {
+  // TODO: mmap module
   auto module = std::make_shared<Module>();
+  std::uint32_t moduleSize = readModuleSize(in);
+  auto moduleMmap2 = std::make_shared<ModuleMmap>(moduleSize);
+
   readHeader(in);
   while (in.peek() != std::istream::traits_type::eof()) {
-    readSection(in, module);
+    readSection(in, module, moduleMmap2);
   }
+
+  moduleMmap = moduleMmap2;
   return module;
 }
 

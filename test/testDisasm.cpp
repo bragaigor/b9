@@ -72,7 +72,8 @@ void roundTripStringSection(const std::vector<std::string>& strings) {
   EXPECT_TRUE(buffer.good());
 
   std::vector<std::string> strings2;
-  readStringSection(buffer, strings2);
+  std::shared_ptr<ModuleMmap> module;
+  readStringSection(buffer, strings2, module);
 
   EXPECT_EQ(strings, strings2);
 }
@@ -88,7 +89,8 @@ bool roundTripInstructions(std::vector<Instruction> instructions) {
   writeInstructions(buffer, instructions);
 
   std::vector<Instruction> result;
-  if (!readInstructions(buffer, result)) {
+  std::shared_ptr<ModuleMmap> temp;
+  if (!readInstructions(buffer, result, temp)) {
     return false;
   }
 
@@ -128,7 +130,8 @@ void roundTripFunctionData(FunctionDef& f) {
 
   std::vector<Instruction> i2;
   auto f2 = FunctionDef{"", i2, 0, 0};
-  readFunctionData(buffer, f2);
+  std::shared_ptr<ModuleMmap> temp;
+  readFunctionData(buffer, f2, temp);
   EXPECT_EQ(f, f2);
 }
 
@@ -153,7 +156,8 @@ void roundTripFunctionSection(std::vector<FunctionDef> functions) {
   EXPECT_TRUE(buffer.good());
 
   std::vector<FunctionDef> functions2;
-  readFunctionSection(buffer, functions2);
+  std::shared_ptr<ModuleMmap> module;
+  readFunctionSection(buffer, functions2, module);
 
   EXPECT_EQ(functions.size(), functions2.size());
 
@@ -179,7 +183,8 @@ void roundTripSerializeDeserialize(std::shared_ptr<Module> module) {
   std::stringstream buffer(std::ios::in | std::ios::out | std::ios::binary);
   serialize(buffer, *module);
 
-  auto module2 = deserialize(buffer);
+  std::shared_ptr<ModuleMmap> m;
+  auto module2 = deserialize(buffer, m);
 
   EXPECT_EQ(*module, *module2);
   EXPECT_EQ(*module, *module);
@@ -248,7 +253,8 @@ TEST(RoundTripSerializationTest, testWriteReadString) {
 
 TEST(ReadBinaryTest, testEmptyModule) {
   std::stringstream buffer(std::ios::in | std::ios::out | std::ios::binary);
-  EXPECT_THROW(deserialize(buffer), DeserializeException);
+  std::shared_ptr<ModuleMmap> m;
+  EXPECT_THROW(deserialize(buffer, m), DeserializeException);
 }
 
 TEST(ReadBinaryTest, testCorruptModule) {
@@ -266,8 +272,9 @@ TEST(ReadBinaryTest, testCorruptModule) {
   writeNumber(buffer2, sectionCode);
   writeNumber(buffer2, functionCount);
 
-  EXPECT_THROW(deserialize(buffer1), DeserializeException);
-  EXPECT_THROW(deserialize(buffer2), DeserializeException);
+  std::shared_ptr<ModuleMmap> m;
+  EXPECT_THROW(deserialize(buffer1, m), DeserializeException);
+  EXPECT_THROW(deserialize(buffer2, m), DeserializeException);
 }
 
 TEST(ReadBinaryTest, runValidModule) {
@@ -275,10 +282,11 @@ TEST(ReadBinaryTest, runValidModule) {
   std::stringstream buffer(std::ios::in | std::ios::out | std::ios::binary);
   serialize(buffer, *m1);
 
-  auto m2 = deserialize(buffer);
+  std::shared_ptr<ModuleMmap> m;
+  auto m2 = deserialize(buffer, m);
   Om::ProcessRuntime runtime;
   VirtualMachine vm(runtime, {});
-  vm.load(m2);
+  vm.load(m2, m);
   vm.run(0, {Om::Value(Om::AS_INT48, 1), Om::Value(Om::AS_INT48, 2)});
 }
 

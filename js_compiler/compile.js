@@ -277,8 +277,10 @@ function FunctionDefinition(outer, name) {
 		outputUInt32(out, this.params.next);
 		outputUInt32(out, this.locals.next);
 		this.instructions.forEach(function (instruction) {
-			instruction.output(out);
+			instruction.output(out); // Instructions are output here
 		})
+
+		return (8 + this.instructions.length * 4);
 	};
 
 	this.pushInstruction = function (instruction) {
@@ -311,6 +313,7 @@ function Module() {
 	this.resolved = false;
 	this.functions = [];
 	this.strings = new SymbolTable();
+	this.moduleSize = 0;
 
 	/// After the module has been entirely built up, resolve any undefined references.
 	this.resolve = function () {
@@ -329,9 +332,11 @@ function Module() {
 		if (!this.resolved) {
 			throw "Module must be resolved before output."
 		}
+		outputUInt32(out, 0); // "Reserve" for module size 
 		this.outputHeader(out);
 		this.outputFunctionSection(out);
 		this.outputStringSection(out);
+		this.outputModuleSize(out);
 	}
 
 	//
@@ -343,23 +348,36 @@ function Module() {
 		fs.writeSync(out, 'b9module');
 	};
 
+	// Write the size of module in bytes (NOT bits) to the begining of bytecodes
+	this.outputModuleSize = function (out) {
+		// Size of module to mmap in deserializer. 32bits for this value should be enough
+		var buf = Buffer.alloc(4);
+		buf.writeUInt32LE(this.moduleSize, 0);
+		fs.writeSync(out, buf, 0, 4, 0);
+		// process.stdout.write("Yay I was called!!!\n");
+	};
+
 	/// internal
 	this.outputFunctionSection = function (out) {
 		var me = this;
 		outputUInt32(out, 1); // the section code.
 		outputUInt32(out, this.functions.length);
+		this.moduleSize += 8;
 		for (var i = 0; i < this.functions.length; ++i) {
 			var func = this.functions[i];
-			outputString(out, func.name);
-			func.output(out);
+			outputString(out, func.name); // Outputs string length and then string
+			this.moduleSize += func.output(out); // Where is index output????
+			this.moduleSize += 4 + func.name.length;
 		}
 	}
 
 	this.outputStringSection = function (out) {
 		outputUInt32(out, 2); // the section code.
 		outputUInt32(out, this.strings.next);
+		this.moduleSize += 8;
 		this.strings.forEach(function (string, id) {
 			outputString(out, string);
+			this.moduleSize += 4 + string.length;
 		});
 	}
 };
@@ -839,7 +857,7 @@ function FirstPassCodeGen() {
 ///  2. Compile -- first pass compilation of the program to a module.
 ///  3. resolve -- final stage of linking up unresolved reference in the input program.
 function compile(code, output) {
-	var syntax = esprima.parse(code);
+	var syntax = esprima.parseScript(code);
 	var compiler = new FirstPassCodeGen();
 	var module = compiler.compile(syntax);
 	module.resolve();

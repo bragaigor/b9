@@ -45,23 +45,36 @@ VirtualMachine::~VirtualMachine() noexcept {
   }
 }
 
-void VirtualMachine::load(std::shared_ptr<const Module> module) {
+void VirtualMachine::load(std::shared_ptr<const Module> module, std::shared_ptr<ModuleMmap> moduleMmap) {
   module_ = module;
+  moduleMmap_ = moduleMmap;
   compiledFunctions_.reserve(getFunctionCount());
 }
 
 /// OpCode Interpreter
 
-JitFunction VirtualMachine::getJitAddress(std::size_t functionIndex) {
+JitFunction VirtualMachine::getJitAddress(std::size_t functionIndex) { //TODO: Instead of functionIndex it will be function name
   if (functionIndex >= compiledFunctions_.size()) {
     return nullptr;
   }
   return compiledFunctions_[functionIndex];
 }
 
+JitFunction VirtualMachine::getJitAddress(std::string functionName) { //TODO: Instead of functionIndex it will be function name
+  if (compiledFunctionsStr_.empty()) {
+    return nullptr;
+  }
+  return compiledFunctionsStr_[functionName];
+}
+
 void VirtualMachine::setJitAddress(std::size_t functionIndex,
                                    JitFunction value) {
   compiledFunctions_[functionIndex] = value;
+}
+
+void VirtualMachine::setJitAddress(std::string functionName,
+                                   JitFunction value) {
+  compiledFunctionsStr_[functionName] = value;
 }
 
 PrimitiveFunction *VirtualMachine::getPrimitive(std::size_t index) {
@@ -70,6 +83,10 @@ PrimitiveFunction *VirtualMachine::getPrimitive(std::size_t index) {
 
 const FunctionDef *VirtualMachine::getFunction(std::size_t index) {
   return &module_->functions[index];
+}
+
+void *VirtualMachine::getFunction(const std::string name) {
+  return moduleMmap_->getFunction(name);
 }
 
 JitFunction VirtualMachine::generateCode(const std::size_t functionIndex) {
@@ -105,9 +122,50 @@ void VirtualMachine::generateAllCode() {
   }
 }
 
+std::uint32_t VirtualMachine::getNextInt32() {
+  return moduleMmap_->getNextInt32Val();
+}
+
+std::uint32_t *VirtualMachine::getCurrentInstruction() {
+  return moduleMmap_->getCurrentInstruction();
+}
+
 StackElement VirtualMachine::run(const std::string &name,
                                  const std::vector<StackElement> &usrArgs) {
-  return run(module_->getFunctionIndex(name), usrArgs);
+
+  std::cout << "Calling new run()!!!\n";
+
+  void *function = getFunction(name);
+  std::uint32_t paramsCount = getNextInt32();
+
+  ExecutionContext *executionContext = new ExecutionContext(*this, cfg_);
+
+  if (cfg_.verbose) {
+    std::cout << "+++++++++++++++++++++++" << std::endl;
+    std::cout << "Running function: " << name
+              << " nparams: " << paramsCount << std::endl;
+  }
+
+  if (paramsCount != usrArgs.size()) {
+    std::stringstream ss;
+    ss << name << " - Got " << usrArgs.size()
+       << " arguments, expected " << paramsCount;
+    std::string message = ss.str();
+    throw BadFunctionCallException{message};
+  }
+
+  // push user defined arguments to send to the program
+  for (std::size_t i = 0; i < paramsCount; i++) {
+    auto idx = paramsCount - i - 1;
+    auto arg = usrArgs[idx];
+    executionContext->push(arg);
+  }
+
+  StackElement result = executionContext->interpret(name); // TODO: Change to function name
+
+  return result;
+
+  // return run(module_->getFunctionIndex(name), usrArgs);
 }
 
 StackElement VirtualMachine::run(const std::size_t functionIndex,
@@ -138,7 +196,7 @@ StackElement VirtualMachine::run(const std::size_t functionIndex,
     executionContext->push(arg);
   }
 
-  StackElement result = executionContext->interpret(functionIndex);
+  StackElement result = executionContext->interpret(functionIndex); // TODO: Change to function name
 
   return result;
 }

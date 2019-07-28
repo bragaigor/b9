@@ -18,7 +18,8 @@ extern "C" int main(int argc, char** argv) {
   }
 
   std::istream in(inbuffer);
-
-  auto module = deserialize(in);
+  
+  std::shared_ptr<ModuleMmap> m;
+  auto module = deserialize(in, m);
   std::cout << *module;
 }
