@@ -81,9 +81,14 @@ Om::Value ExecutionContext::callJitFunction(JitFunction jitFunction,
 
 StackElement ExecutionContext::interpret(const std::size_t functionIndex) { // TODO: Change to function name
   auto function = virtualMachine_->getFunction(functionIndex);
+  void *funcPtr = virtualMachine_->getFunction(functionIndex, true);
   auto paramsCount = function->nparams;
   auto localsCount = function->nlocals;
   auto jitFunction = virtualMachine_->getJitAddress(functionIndex);
+
+  std::string funcName = virtualMachine_->getFunctionName(funcPtr);
+  std::uint32_t nparams = virtualMachine_->getFunctionNparams(funcPtr, funcName.size() + 4);
+  std::uint32_t nlocals = virtualMachine_->getFunctionNLocals(funcPtr, funcName.size() + 8);
 
   if (cfg_->debug) {
     std::cerr << "intepret: " << function->name
@@ -95,265 +100,110 @@ StackElement ExecutionContext::interpret(const std::size_t functionIndex) { // T
   }
 
   // interpret the method otherwise
-  const Instruction *instructionPointer = function->instructions.data();
-
-  StackElement *params = stack_.top() - paramsCount;
-
-  stack_.pushn(localsCount);  // make room for locals in the stack
-  StackElement *locals = stack_.top() - localsCount;
-
-  while (*instructionPointer != END_SECTION) {
-    switch (instructionPointer->opCode()) {
-      case OpCode::FUNCTION_CALL:
-        doFunctionCall(instructionPointer->immediate());
-        break;
-      case OpCode::FUNCTION_RETURN: {
-        auto result = stack_.pop();
-        stack_.restore(params);
-        return result;
-        break;
-      }
-      case OpCode::PRIMITIVE_CALL:
-        doPrimitiveCall(instructionPointer->immediate());
-        break;
-      case OpCode::JMP:
-        instructionPointer += instructionPointer->immediate();
-        break;
-      case OpCode::DUPLICATE:
-        doDuplicate();
-        break;
-      case OpCode::DROP:
-        doDrop();
-        break;
-      case OpCode::PUSH_FROM_LOCAL:
-        doPushFromLocal(locals, instructionPointer->immediate());
-        break;
-      case OpCode::POP_INTO_LOCAL:
-        doPopIntoLocal(locals, instructionPointer->immediate());
-        break;
-      case OpCode::PUSH_FROM_PARAM:
-        doPushFromParam(params, instructionPointer->immediate());
-        break;
-      case OpCode::POP_INTO_PARAM:
-        doPopIntoParam(params, instructionPointer->immediate());
-        break;
-      case OpCode::INT_ADD:
-        doIntAdd();
-        break;
-      case OpCode::INT_SUB:
-        doIntSub();
-        break;
-      case OpCode::INT_MUL:
-        doIntMul();
-        break;
-      case OpCode::INT_DIV:
-        doIntDiv();
-        break;
-      case OpCode::INT_PUSH_CONSTANT:
-        doIntPushConstant(instructionPointer->immediate());
-        break;
-      case OpCode::INT_NOT:
-        doIntNot();
-        break;
-      case OpCode::JMP_EQ:
-        instructionPointer += doJmpEq(instructionPointer->immediate());
-        break;
-      case OpCode::JMP_NEQ:
-        instructionPointer += doJmpNeq(instructionPointer->immediate());
-        break;
-      case OpCode::JMP_GT:
-        instructionPointer += doJmpGt(instructionPointer->immediate());
-        break;
-      case OpCode::JMP_GE:
-        instructionPointer += doJmpGe(instructionPointer->immediate());
-        break;
-      case OpCode::JMP_LT:
-        instructionPointer += doJmpLt(instructionPointer->immediate());
-        break;
-      case OpCode::JMP_LE:
-        instructionPointer += doJmpLe(instructionPointer->immediate());
-        break;
-      case OpCode::STR_PUSH_CONSTANT:
-        doStrPushConstant(instructionPointer->immediate());
-        break;
-      case OpCode::NEW_OBJECT:
-        doNewObject();
-        break;
-      case OpCode::PUSH_FROM_OBJECT:
-        doPushFromObject(Om::Id(instructionPointer->immediate()));
-        break;
-      case OpCode::POP_INTO_OBJECT:
-        doPopIntoObject(Om::Id(instructionPointer->immediate()));
-        break;
-      case OpCode::CALL_INDIRECT:
-        doCallIndirect();
-        break;
-      case OpCode::SYSTEM_COLLECT:
-        doSystemCollect();
-        break;
-      default:
-        assert(false);
-        break;
-    }
-    instructionPointer++;
-    programCounter_++;
-  }
-  throw std::runtime_error("Reached end of function");
-}
-
-StackElement ExecutionContext::interpret(std::string functionName) {
-  void *function = virtualMachine_->getFunction(functionName);
-  std::uint32_t paramsCount = virtualMachine_->getNextInt32();
-  std::uint32_t localsCount = virtualMachine_->getNextInt32();
-  // auto jitFunction = virtualMachine_->getJitAddress(functionIndex); // TODO: Fix this!!!!!!
-
-  std::cout << "Read functionName: " << functionName << " nparams: " 
-          << paramsCount << " localsCount: " << localsCount << std::endl;
-
-  if (cfg_->debug) {
-    std::cerr << "intepret: " << functionName
-              << " nparams: " << paramsCount << std::endl;
-  }
-
-  // if (jitFunction) {
-  //   return callJitFunction(jitFunction, paramsCount);
-  // }
-
-  // interpret the method otherwise
-  std::uint32_t *thisInstruction = virtualMachine_->getCurrentInstruction();
+  std::uint32_t *thisInstruction = virtualMachine_->getCurrentInstruction(funcPtr, funcName.size() + 12);
   const Instruction *instructionPointer = (const Instruction *)thisInstruction;
+  // const Instruction *instructionPointer = function->instructions.data();
 
   StackElement *params = stack_.top() - paramsCount;
 
   stack_.pushn(localsCount);  // make room for locals in the stack
   StackElement *locals = stack_.top() - localsCount;
 
-  std::cout << "Current raw instruction is: " << std::hex << *thisInstruction << std::dec << std::endl;
-
   while (*instructionPointer != END_SECTION) {
     switch (instructionPointer->opCode()) {
       case OpCode::FUNCTION_CALL:
-        std::cout << "Calling OpCode::FUNCTION_CALL\n";
         doFunctionCall(instructionPointer->immediate());
         break;
       case OpCode::FUNCTION_RETURN: {
-        std::cout << "Calling OpCode::FUNCTION_RETURN\n";
         auto result = stack_.pop();
         stack_.restore(params);
         return result;
         break;
       }
       case OpCode::PRIMITIVE_CALL:
-        std::cout << "Calling OpCode::PRIMITIVE_CALL\n";
         doPrimitiveCall(instructionPointer->immediate());
         break;
       case OpCode::JMP:
-        std::cout << "Calling OpCode::JMP\n";
         instructionPointer += instructionPointer->immediate();
         break;
       case OpCode::DUPLICATE:
-        std::cout << "Calling OpCode::DUPLICATE\n";
         doDuplicate();
         break;
       case OpCode::DROP:
-        std::cout << "Calling OpCode::DROP\n";
         doDrop();
         break;
       case OpCode::PUSH_FROM_LOCAL:
-        std::cout << "Calling OpCode::PUSH_FROM_LOCAL\n";
         doPushFromLocal(locals, instructionPointer->immediate());
         break;
       case OpCode::POP_INTO_LOCAL:
-        std::cout << "Calling OpCode::POP_INTO_LOCAL\n";
         doPopIntoLocal(locals, instructionPointer->immediate());
         break;
       case OpCode::PUSH_FROM_PARAM:
-        std::cout << "Calling OpCode::PUSH_FROM_PARAM\n";
         doPushFromParam(params, instructionPointer->immediate());
         break;
       case OpCode::POP_INTO_PARAM:
-        std::cout << "Calling OpCode::POP_INTO_PARAM\n";
         doPopIntoParam(params, instructionPointer->immediate());
         break;
       case OpCode::INT_ADD:
-        std::cout << "Calling OpCode::INT_ADD\n";
         doIntAdd();
         break;
       case OpCode::INT_SUB:
-        std::cout << "Calling OpCode::INT_SUB\n";
         doIntSub();
         break;
       case OpCode::INT_MUL:
-        std::cout << "Calling OpCode::INT_MUL\n";
         doIntMul();
         break;
       case OpCode::INT_DIV:
-        std::cout << "Calling OpCode::INT_DIV\n";
         doIntDiv();
         break;
       case OpCode::INT_PUSH_CONSTANT:
-        std::cout << "Calling OpCode::INT_PUSH_CONSTANT\n";
         doIntPushConstant(instructionPointer->immediate());
         break;
       case OpCode::INT_NOT:
-        std::cout << "Calling OpCode::INT_NOT\n";
         doIntNot();
         break;
       case OpCode::JMP_EQ:
-        std::cout << "Calling OpCode::JMP_EQ\n";
         instructionPointer += doJmpEq(instructionPointer->immediate());
         break;
       case OpCode::JMP_NEQ:
-        std::cout << "Calling OpCode::JMP_NEQ\n";
         instructionPointer += doJmpNeq(instructionPointer->immediate());
         break;
       case OpCode::JMP_GT:
-        std::cout << "Calling OpCode::JMP_GT\n";
         instructionPointer += doJmpGt(instructionPointer->immediate());
         break;
       case OpCode::JMP_GE:
-        std::cout << "Calling OpCode::JMP_GE\n";
         instructionPointer += doJmpGe(instructionPointer->immediate());
         break;
       case OpCode::JMP_LT:
-        std::cout << "Calling OpCode::JMP_LT\n";
         instructionPointer += doJmpLt(instructionPointer->immediate());
         break;
       case OpCode::JMP_LE:
-        std::cout << "Calling OpCode::JMP_LE\n";
         instructionPointer += doJmpLe(instructionPointer->immediate());
         break;
       case OpCode::STR_PUSH_CONSTANT:
-        std::cout << "Calling OpCode::STR_PUSH_CONSTANT\n";
         doStrPushConstant(instructionPointer->immediate());
         break;
       case OpCode::NEW_OBJECT:
-        std::cout << "Calling OpCode::NEW_OBJECT\n";
         doNewObject();
         break;
       case OpCode::PUSH_FROM_OBJECT:
-        std::cout << "Calling OpCode::PUSH_FROM_OBJECT\n";
         doPushFromObject(Om::Id(instructionPointer->immediate()));
         break;
       case OpCode::POP_INTO_OBJECT:
-        std::cout << "Calling OpCode::POP_INTO_OBJECT\n";
         doPopIntoObject(Om::Id(instructionPointer->immediate()));
         break;
       case OpCode::CALL_INDIRECT:
-        std::cout << "Calling OpCode::CALL_INDIRECT\n";
         doCallIndirect();
         break;
       case OpCode::SYSTEM_COLLECT:
-        std::cout << "Calling OpCode::SYSTEM_COLLECT\n";
         doSystemCollect();
         break;
       default:
         assert(false);
         break;
     }
-    std::cout << "Updating instruction...\n";
     instructionPointer++;
-    programCounter_++;
+    // programCounter_++;
   }
   throw std::runtime_error("Reached end of function");
 }

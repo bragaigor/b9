@@ -126,8 +126,7 @@ static void run(Om::ProcessRuntime& runtime, const RunConfig& cfg) {
   std::cout << "\tNumber of functions from new module: " << moduleMmap->getNumberOfFunctions() << std::endl;
 
   size_t functionIndex = module->getFunctionIndex(cfg.mainFunction);
-  // auto result = vm.run(functionIndex, cfg.usrArgs);
-  auto result = vm.run(cfg.mainFunction, cfg.usrArgs);
+  auto result = vm.run(functionIndex, cfg.usrArgs);
   std::cout << std::endl << "=> " << result << std::endl;
 }
 

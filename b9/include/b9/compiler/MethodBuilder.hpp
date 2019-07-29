@@ -24,10 +24,6 @@ class MethodBuilder : public TR::MethodBuilder {
   MethodBuilder(VirtualMachine &virtualMachine,
                 const std::size_t functionIndex);
 
-  MethodBuilder(VirtualMachine &virtualMachine,
-                void *functionPtr,
-                std::string functionName);
-
   virtual bool buildIL();
 
  private:

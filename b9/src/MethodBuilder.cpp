@@ -38,42 +38,14 @@ MethodBuilder::MethodBuilder(VirtualMachine &virtualMachine,
       globalTypes_(virtualMachine.compiler()->globalTypes()),
       functionIndex_(functionIndex) {
   const FunctionDef *function = virtualMachine_.getFunction(functionIndex);
+  void *funcPtr = virtualMachine_.getFunction(functionIndex, true);
+  std::string funcName = virtualMachine_.getFunctionName(funcPtr);
 
   /// TODO: The __LINE__/__FILE__ stuff is 100% bogus, this is about as bad.
   DefineLine("<unknown");
-  DefineFile(function->name.c_str());
+  DefineFile(function->name.c_str()); // TODO: change to funcName.c_str()
 
   DefineName(function->name.c_str());
-
-  DefineReturnType(globalTypes().stackElement);
-
-  defineParams();
-
-  defineLocals();
-
-  defineFunctions();
-
-  AllLocalsHaveBeenDefined();
-}
-
-MethodBuilder::MethodBuilder(VirtualMachine &virtualMachine,
-                             void *functionPtr,
-                             std::string functionName)
-    : TR::MethodBuilder(&virtualMachine.compiler()->typeDictionary()),
-      virtualMachine_(virtualMachine),
-      cfg_(virtualMachine.config()),
-      maxInlineDepth_(cfg_.maxInlineDepth),
-      globalTypes_(virtualMachine.compiler()->globalTypes()),
-      functionPtr_(functionPtr),
-      functionName_(functionName),
-      functionIndex_(0) {
-  // const FunctionDef *function = virtualMachine_.getFunction(functionIndex);
-
-  /// TODO: The __LINE__/__FILE__ stuff is 100% bogus, this is about as bad.
-  DefineLine("<unknown>");
-  DefineFile(functionName.c_str());
-
-  DefineName(functionName.c_str());
 
   DefineReturnType(globalTypes().stackElement);
 
@@ -94,8 +66,11 @@ static const std::string LOCAL_STRING = "local";
 /// PassParam mode.
 void MethodBuilder::defineParams() {
   const FunctionDef *function = virtualMachine_.getFunction(functionIndex_);
+  std::uint32_t nparams = virtualMachine_.getNextInt32();
+
   if (cfg_.verbose) {
     std::cout << "Defining " << function->nparams << " parameters\n";
+    std::cout << "Defining " << nparams << " parameters\n";
   }
 
   /// first argument is always the execution context
@@ -114,8 +89,10 @@ void MethodBuilder::defineParams() {
 
 void MethodBuilder::defineLocals() {
   const FunctionDef *function = virtualMachine_.getFunction(functionIndex_);
+  std::uint32_t nlocals = virtualMachine_.getNextInt32();
   if (cfg_.verbose) {
     std::cout << "Defining " << function->nlocals << " locals\n";
+    std::cout << "Defining " << nlocals << " locals\n";
   }
 
   // Pointer to the base of the frame.  Used for rolling back the stack pointer

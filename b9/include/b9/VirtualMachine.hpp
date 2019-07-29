@@ -78,25 +78,27 @@ class VirtualMachine {
   StackElement run(const std::string &name,
                    const std::vector<StackElement> &usrArgs);
 
-  const FunctionDef *getFunction(std::size_t index);
+  const FunctionDef *getFunction(std::size_t index); // TODO: Remove this eventually
 
-  void *getFunction(const std::string name);
+  void *getFunction(std::size_t index, bool dummy);
 
   std::uint32_t getNextInt32();
 
-  std::uint32_t *getCurrentInstruction();
+  std::uint32_t *getCurrentInstruction(void *funcPtr, std::uint32_t offset);
 
   PrimitiveFunction *getPrimitive(std::size_t index);
 
   JitFunction getJitAddress(std::size_t functionIndex);
 
-  JitFunction getJitAddress(std::string functionName);
-
   void setJitAddress(std::size_t functionIndex, JitFunction value);
 
-  void setJitAddress(std::string functionName, JitFunction value);
-
   std::size_t getFunctionCount();
+
+  std::string getFunctionName(void *funcPtr);
+
+  std::uint32_t getFunctionNparams(void *funcPtr, std::uint32_t offset);
+
+  std::uint32_t getFunctionNLocals(void *funcPtr, std::uint32_t offset);
 
   JitFunction generateCode(const std::size_t functionIndex);
 
@@ -124,7 +126,6 @@ class VirtualMachine {
   std::shared_ptr<ModuleMmap> moduleMmap_; // TODO: Use this instead 
   std::shared_ptr<const Module> module_; // TODO: WE shouldn't need this with mmap...
   std::vector<JitFunction> compiledFunctions_; // TODO: Change to HashMap key: func name, value: JitFunction
-  std::unordered_map<std::string, JitFunction> compiledFunctionsStr_;
 };
 
 }  // namespace b9
