@@ -37,15 +37,16 @@ MethodBuilder::MethodBuilder(VirtualMachine &virtualMachine,
       maxInlineDepth_(cfg_.maxInlineDepth),
       globalTypes_(virtualMachine.compiler()->globalTypes()),
       functionIndex_(functionIndex) {
+
   const FunctionDef *function = virtualMachine_.getFunction(functionIndex);
-  void *funcPtr = virtualMachine_.getFunction(functionIndex, true);
-  std::string funcName = virtualMachine_.getFunctionName(funcPtr);
+  functionPtr_ = virtualMachine_.getFunction(functionIndex, true);
+  functionName_ = virtualMachine_.getFunctionName(functionPtr_);
 
   /// TODO: The __LINE__/__FILE__ stuff is 100% bogus, this is about as bad.
-  DefineLine("<unknown");
-  DefineFile(function->name.c_str()); // TODO: change to funcName.c_str()
+  DefineLine("<unknown>");
+  DefineFile(functionName_.c_str());
 
-  DefineName(function->name.c_str());
+  DefineName(functionName_.c_str());
 
   DefineReturnType(globalTypes().stackElement);
 
@@ -66,7 +67,8 @@ static const std::string LOCAL_STRING = "local";
 /// PassParam mode.
 void MethodBuilder::defineParams() {
   const FunctionDef *function = virtualMachine_.getFunction(functionIndex_);
-  std::uint32_t nparams = virtualMachine_.getNextInt32();
+
+  std::uint32_t nparams = virtualMachine_.getFunctionNparams(functionPtr_, functionName_.size() + INSTRUCTION_SIZE);
 
   if (cfg_.verbose) {
     std::cout << "Defining " << function->nparams << " parameters\n";
@@ -89,7 +91,9 @@ void MethodBuilder::defineParams() {
 
 void MethodBuilder::defineLocals() {
   const FunctionDef *function = virtualMachine_.getFunction(functionIndex_);
-  std::uint32_t nlocals = virtualMachine_.getNextInt32();
+
+  std::uint32_t nlocals = virtualMachine_.getFunctionNLocals(functionPtr_, functionName_.size() + INSTRUCTION_SIZE*2);
+
   if (cfg_.verbose) {
     std::cout << "Defining " << function->nlocals << " locals\n";
     std::cout << "Defining " << nlocals << " locals\n";
@@ -114,11 +118,17 @@ void MethodBuilder::defineLocals() {
 }
 
 void MethodBuilder::defineFunctions() {
+  std::cout << "Inside MethodBuilder::defineFunctions()\n";
   int functionIndex = 0;
   while (functionIndex < virtualMachine_.getFunctionCount()) {
     if (virtualMachine_.getJitAddress(functionIndex) != nullptr) {
       auto function = virtualMachine_.getFunction(functionIndex);
       auto name = function->name.c_str();
+
+      void *funcPtr = virtualMachine_.getFunction(functionIndex, true);
+      std::string funcName = virtualMachine_.getFunctionName(funcPtr);
+      std::uint32_t nparams = virtualMachine_.getFunctionNparams(funcPtr, funcName.size() + INSTRUCTION_SIZE);
+
       DefineFunction(name, (char *)__FILE__, name,
                      (void *)virtualMachine_.getJitAddress(functionIndex),
                      Int64, function->nparams, globalTypes().stackElement,
@@ -129,6 +139,8 @@ void MethodBuilder::defineFunctions() {
     }
     functionIndex++;
   }
+
+  std::cout << "Inside MethodBuilder::defineFunctions() OUTSIDE the loop!!!!!\n";
 
   DefineFunction((char *)"interpret", (char *)__FILE__, "interpret",
                  (void *)&interpret, Int64, 2,
@@ -145,6 +157,8 @@ void MethodBuilder::defineFunctions() {
                  (void *)&print_value, NoType, 1, globalTypes().stackElement);
   DefineFunction((char *)"print_ptr", (char *)__FILE__, "print_ptr",
                  (void *)&print_ptr, NoType, 1, globalTypes().addressPtr);
+
+  std::cout << "Inside MethodBuilder::defineFunctions() RETURNING!!!!\n";
 }
 
 bool MethodBuilder::inlineProgramIntoBuilder(
@@ -156,12 +170,21 @@ bool MethodBuilder::inlineProgramIntoBuilder(
   const FunctionDef *function = virtualMachine_.getFunction(functionIndex);
   const Instruction *program = function->instructions.data();
 
+  std::cout << "Inside MethodBuilder::inlineProgramIntoBuilder()\n";
+
+  void *funcPtr = virtualMachine_.getFunction(functionIndex, true);
+  std::string funcName = virtualMachine_.getFunctionName(funcPtr);
+  std::uint32_t nparams = virtualMachine_.getFunctionNparams(funcPtr, funcName.size() + INSTRUCTION_SIZE);
+  std::uint32_t nlocals = virtualMachine_.getFunctionNLocals(funcPtr, funcName.size() + INSTRUCTION_SIZE*2);
+  std::uint32_t *thisInstruction = virtualMachine_.getCurrentInstruction(funcPtr, funcName.size() + INSTRUCTION_SIZE*3);
+  const Instruction *instructionPointer = (const Instruction *)thisInstruction;
+
   // Create a BytecodeBuilder for each Bytecode
   auto numberOfBytecodes = function->instructions.size();
 
   if (numberOfBytecodes == 0) {
     if (cfg_.verbose) {
-      std::cerr << "unexpected EMPTY function body for " << function->name
+      std::cerr << "unexpected EMPTY function body for " << funcName
                 << std::endl;
     }
     return false;
@@ -179,6 +202,21 @@ bool MethodBuilder::inlineProgramIntoBuilder(
     builderTable.push_back(OrphanBytecodeBuilder(i));
   }
 
+  // TODO: Find a better way to count number of function bytecodes. This is bogus!! Must add 1 to it at the end!
+  int opcodeCount = 0;
+  while (*instructionPointer != END_SECTION) {
+    // builderTable.push_back(OrphanBytecodeBuilder(i++));
+    std::cout << "Raw instruction is ::::::::::::::::::::::::: " << std::hex << instructionPointer->raw() << std::dec << std::endl;
+    opcodeCount++;
+    if (instructionPointer->opCode() == OpCode::END_SECTION) {
+      break;
+    }
+    instructionPointer++;
+  }
+
+  std::cout << "Original number of bytecodes for function: " << funcName << ", is : "
+            << numberOfBytecodes << ", while the calculated one was: " << opcodeCount << std::endl;
+
   // Get the first Builder
 
   TR::BytecodeBuilder *builder = builderTable[0];
@@ -193,11 +231,14 @@ bool MethodBuilder::inlineProgramIntoBuilder(
   bool ok = true;
 
   for (std::size_t index = GetNextBytecodeFromWorklist(); index != -1;
-       index = GetNextBytecodeFromWorklist()) {
-    ok = generateILForBytecode(function, builderTable, index,
-                               jumpToBuilderForInlinedReturn);
-    if (!ok) break;
-  }
+    index = GetNextBytecodeFromWorklist()) {
+      // ok = generateILForBytecode(thisInstruction, function, builderTable, index, // This is the index of the bytecode NOT the function 
+      //                           jumpToBuilderForInlinedReturn);
+
+      ok = generateILForBytecode(thisInstruction, builderTable, index, // This is the index of the bytecode NOT the function 
+                                jumpToBuilderForInlinedReturn, numberOfBytecodes);
+      if (!ok) break;
+    }
   return ok;
 }
 
@@ -268,6 +309,7 @@ void MethodBuilder::storeParam(TR::IlBuilder *b, std::size_t index,
 }
 
 bool MethodBuilder::generateILForBytecode(
+    void *instructionPtr,
     const FunctionDef *function,
     std::vector<TR::BytecodeBuilder *> bytecodeBuilderTable,
     std::size_t instructionIndex,
@@ -275,6 +317,14 @@ bool MethodBuilder::generateILForBytecode(
   TR::BytecodeBuilder *builder = bytecodeBuilderTable[instructionIndex];
   const std::vector<Instruction> &program = function->instructions;
   const Instruction instruction = program[instructionIndex];
+
+  std::uint32_t *thisInstruction = (std::uint32_t*)instructionPtr;
+  const Instruction *instruction2 = (const Instruction *)thisInstruction;
+
+  void* trueInstruction = (void*)(((instruction_type*)instructionPtr) + instructionIndex);
+
+  std::cout << "======== True instruction is: " << std::hex << instruction.raw() << std::dec
+            << ", my is: " << std::hex << *((instruction_type*)trueInstruction) << std::dec << std::endl;
 
   if (cfg_.verbose) {
     std::cout << "generating index=" << instructionIndex
@@ -422,6 +472,177 @@ bool MethodBuilder::generateILForBytecode(
     case OpCode::FUNCTION_CALL: {
       handle_bc_function_call(builder, nextBytecodeBuilder,
                               instruction.immediate());
+    } break;
+    default:
+      if (cfg_.debug) {
+        std::cout << "Cannot handle unknown bytecode: returning" << std::endl;
+      }
+      handled = false;
+      break;
+  }
+
+  return handled;
+}
+
+bool MethodBuilder::generateILForBytecode(
+    void *funcPtr,
+    std::vector<TR::BytecodeBuilder *> bytecodeBuilderTable,
+    std::size_t instructionIndex,
+    TR::BytecodeBuilder *jumpToBuilderForInlinedReturn,
+    std::size_t numberOfInstructions) {
+  TR::BytecodeBuilder *builder = bytecodeBuilderTable[instructionIndex];
+  // const std::vector<Instruction> &program = function->instructions;
+  // const Instruction instruction = program[instructionIndex];
+
+  // std::uint32_t *thisInstruction = (std::uint32_t*)funcPtr;
+  const Instruction *instruction = static_cast<const Instruction*>((void*)(static_cast<instruction_type*>(funcPtr) + instructionIndex));
+
+  if (cfg_.verbose) {
+    std::cout << "generating index=" << instructionIndex
+              << " bc=" << funcPtr << std::endl;
+  }
+
+  if (nullptr == builder) {
+    if (cfg_.verbose)
+      std::cout << "unexpected NULL BytecodeBuilder!" << std::endl;
+    return false;
+  }
+
+  TR::BytecodeBuilder *nextBytecodeBuilder = nullptr;
+
+  if (instructionIndex + 1 <= numberOfInstructions) {
+    nextBytecodeBuilder = bytecodeBuilderTable[instructionIndex + 1];
+  }
+
+  bool handled = true;
+
+  if (cfg_.debug) {
+    if (jumpToBuilderForInlinedReturn != nullptr) {
+      std::cout << "INLINED METHOD: skew " << firstArgumentIndex
+                << " return bc will jump to " << jumpToBuilderForInlinedReturn
+                << ": ";
+    }
+
+    builder->Call("print_stack", 1, builder->Load("executionContext"));
+
+    builder->Call(
+        "trace", 2, builder->ConstAddress(funcPtr),
+        builder->ConstAddress(funcPtr));
+
+    state(builder)->Commit(builder);
+  }
+
+  switch (instruction->opCode()) {
+    case OpCode::PUSH_FROM_LOCAL:
+      pushValue(builder, loadLocal(builder, instruction->immediate()));
+      if (nextBytecodeBuilder)
+        builder->AddFallThroughBuilder(nextBytecodeBuilder);
+      break;
+    case OpCode::POP_INTO_LOCAL:
+      storeLocal(builder, instruction->immediate(), popValue(builder));
+      if (nextBytecodeBuilder)
+        builder->AddFallThroughBuilder(nextBytecodeBuilder);
+      break;
+    case OpCode::PUSH_FROM_PARAM:
+      pushValue(builder, loadParam(builder, instruction->immediate()));
+      if (nextBytecodeBuilder)
+        builder->AddFallThroughBuilder(nextBytecodeBuilder);
+      break;
+    case OpCode::POP_INTO_PARAM:
+      storeParam(builder, instruction->immediate(), popValue(builder));
+      if (nextBytecodeBuilder)
+        builder->AddFallThroughBuilder(nextBytecodeBuilder);
+      break;
+    case OpCode::FUNCTION_RETURN: {
+      auto result = popValue(builder);
+      TR::IlValue *stack = builder->StructFieldInstanceAddress(
+          "b9::ExecutionContext", "stack_", builder->Load("executionContext"));
+      builder->StoreIndirect("b9::OperandStack", "top_", stack,
+                             builder->Load("stackBase"));
+      builder->Return(result);
+    } break;
+    case OpCode::DUPLICATE: {
+      auto x = popValue(builder);
+      pushValue(builder, x);
+      pushValue(builder, x);
+      if (nextBytecodeBuilder) {
+        builder->AddFallThroughBuilder(nextBytecodeBuilder);
+      }
+    } break;
+    case OpCode::DROP:
+      drop(builder);
+      if (nextBytecodeBuilder)
+        builder->AddFallThroughBuilder(nextBytecodeBuilder);
+      break;
+    case OpCode::JMP:
+      handle_bc_jmp(builder, bytecodeBuilderTable, funcPtr, instructionIndex,
+                    nextBytecodeBuilder);
+      break;
+    case OpCode::JMP_EQ:
+      handle_bc_jmp_eq(builder, bytecodeBuilderTable, funcPtr, instructionIndex,
+                       nextBytecodeBuilder);
+      break;
+    case OpCode::JMP_NEQ:
+      handle_bc_jmp_neq(builder, bytecodeBuilderTable, funcPtr,
+                        instructionIndex, nextBytecodeBuilder);
+      break;
+    case OpCode::JMP_LT:
+      handle_bc_jmp_lt(builder, bytecodeBuilderTable, funcPtr, instructionIndex,
+                       nextBytecodeBuilder);
+      break;
+    case OpCode::JMP_LE:
+      handle_bc_jmp_le(builder, bytecodeBuilderTable, funcPtr, instructionIndex,
+                       nextBytecodeBuilder);
+      break;
+    case OpCode::JMP_GT:
+      handle_bc_jmp_gt(builder, bytecodeBuilderTable, funcPtr, instructionIndex,
+                       nextBytecodeBuilder);
+      break;
+    case OpCode::JMP_GE:
+      handle_bc_jmp_ge(builder, bytecodeBuilderTable, funcPtr, instructionIndex,
+                       nextBytecodeBuilder);
+      break;
+    case OpCode::INT_SUB:
+      handle_bc_sub(builder, nextBytecodeBuilder);
+      break;
+    case OpCode::INT_ADD:
+      handle_bc_add(builder, nextBytecodeBuilder);
+      break;
+    case OpCode::INT_MUL:
+      handle_bc_mul(builder, nextBytecodeBuilder);
+      break;
+    case OpCode::INT_DIV:
+      handle_bc_div(builder, nextBytecodeBuilder);
+      break;
+    case OpCode::INT_NOT:
+      handle_bc_not(builder, nextBytecodeBuilder);
+      break;
+    case OpCode::INT_PUSH_CONSTANT: {
+      int constvalue = instruction->immediate();
+      /// TODO: box/unbox here.
+      pushInt48(builder, builder->ConstInt64(constvalue));
+      if (nextBytecodeBuilder)
+        builder->AddFallThroughBuilder(nextBytecodeBuilder);
+    } break;
+    case OpCode::STR_PUSH_CONSTANT: {
+      int index = instruction->immediate();
+      /// TODO: Box/unbox here.
+      pushUint48(builder, builder->ConstInt64(index));
+      if (nextBytecodeBuilder)
+        builder->AddFallThroughBuilder(nextBytecodeBuilder);
+    } break;
+    case OpCode::PRIMITIVE_CALL: {
+      state(builder)->Commit(builder);
+      TR::IlValue *result =
+          builder->Call("primitive_call", 2, builder->Load("executionContext"),
+                        builder->ConstInt32(instruction->immediate()));
+      state(builder)->Reload(builder);
+      if (nextBytecodeBuilder)
+        builder->AddFallThroughBuilder(nextBytecodeBuilder);
+    } break;
+    case OpCode::FUNCTION_CALL: {
+      handle_bc_function_call(builder, nextBytecodeBuilder,
+                              instruction->immediate());
     } break;
     default:
       if (cfg_.debug) {
@@ -616,6 +837,121 @@ void MethodBuilder::handle_bc_jmp_ge(
     TR::BytecodeBuilder *nextBuilder) {
   Instruction instruction = program[bytecodeIndex];
   int delta = instruction.immediate() + 1;
+  int next_bc_index = bytecodeIndex + delta;
+  TR::BytecodeBuilder *jumpTo = bytecodeBuilderTable[next_bc_index];
+
+  TR::IlValue *right = popInt48(builder);
+  TR::IlValue *left = popInt48(builder);
+
+  builder->IfCmpGreaterOrEqual(jumpTo, left, right);
+  builder->AddFallThroughBuilder(nextBuilder);
+}
+
+void MethodBuilder::handle_bc_jmp(
+    TR::BytecodeBuilder *builder,
+    const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+    void *program, long bytecodeIndex,
+    TR::BytecodeBuilder *nextBuilder) {
+  Instruction *instruction = static_cast<Instruction*>((void*)(static_cast<instruction_type*>(program) + bytecodeIndex));
+  // Instruction instruction = program[bytecodeIndex];
+  int delta = instruction->immediate() + 1;
+  int next_bc_index = bytecodeIndex + delta;
+  TR::BytecodeBuilder *destBuilder = bytecodeBuilderTable[next_bc_index];
+  builder->Goto(destBuilder);
+}
+
+void MethodBuilder::handle_bc_jmp_eq(
+    TR::BytecodeBuilder *builder,
+    const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+    void *program, long bytecodeIndex,
+    TR::BytecodeBuilder *nextBuilder) {
+  Instruction *instruction = static_cast<Instruction*>((void*)(static_cast<instruction_type*>(program) + bytecodeIndex));
+  int delta = instruction->immediate() + 1;
+  int next_bc_index = bytecodeIndex + delta;
+  TR::BytecodeBuilder *jumpTo = bytecodeBuilderTable[next_bc_index];
+
+  TR::IlValue *right = popInt48(builder);
+  TR::IlValue *left = popInt48(builder);
+
+  builder->IfCmpEqual(jumpTo, left, right);
+  builder->AddFallThroughBuilder(nextBuilder);
+}
+
+void MethodBuilder::handle_bc_jmp_neq(
+    TR::BytecodeBuilder *builder,
+    const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+    void *program, long bytecodeIndex,
+    TR::BytecodeBuilder *nextBuilder) {
+  Instruction *instruction = static_cast<Instruction*>((void*)(static_cast<instruction_type*>(program) + bytecodeIndex));
+  int delta = instruction->immediate() + 1;
+  int next_bc_index = bytecodeIndex + delta;
+  TR::BytecodeBuilder *jumpTo = bytecodeBuilderTable[next_bc_index];
+
+  TR::IlValue *right = popValue(builder);
+  TR::IlValue *left = popValue(builder);
+
+  builder->IfCmpNotEqual(jumpTo, left, right);
+  builder->AddFallThroughBuilder(nextBuilder);
+}
+
+void MethodBuilder::handle_bc_jmp_lt(
+    TR::BytecodeBuilder *builder,
+    const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+    void *program, long bytecodeIndex,
+    TR::BytecodeBuilder *nextBuilder) {
+  Instruction *instruction = static_cast<Instruction*>((void*)(static_cast<instruction_type*>(program) + bytecodeIndex));
+  int delta = instruction->immediate() + 1;
+  int next_bc_index = bytecodeIndex + delta;
+  TR::BytecodeBuilder *jumpTo = bytecodeBuilderTable[next_bc_index];
+
+  TR::IlValue *right = popValue(builder);
+  TR::IlValue *left = popValue(builder);
+
+  builder->IfCmpLessThan(jumpTo, left, right);
+  builder->AddFallThroughBuilder(nextBuilder);
+}
+
+void MethodBuilder::handle_bc_jmp_le(
+    TR::BytecodeBuilder *builder,
+    const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+    void *program, long bytecodeIndex,
+    TR::BytecodeBuilder *nextBuilder) {
+  Instruction *instruction = static_cast<Instruction*>((void*)(static_cast<instruction_type*>(program) + bytecodeIndex));
+  int delta = instruction->immediate() + 1;
+  int next_bc_index = bytecodeIndex + delta;
+  TR::BytecodeBuilder *jumpTo = bytecodeBuilderTable[next_bc_index];
+
+  TR::IlValue *right = popInt48(builder);
+  TR::IlValue *left = popInt48(builder);
+
+  builder->IfCmpLessOrEqual(jumpTo, left, right);
+  builder->AddFallThroughBuilder(nextBuilder);
+}
+
+void MethodBuilder::handle_bc_jmp_gt(
+    TR::BytecodeBuilder *builder,
+    const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+    void *program, long bytecodeIndex,
+    TR::BytecodeBuilder *nextBuilder) {
+  Instruction *instruction = static_cast<Instruction*>((void*)(static_cast<instruction_type*>(program) + bytecodeIndex));
+  int delta = instruction->immediate() + 1;
+  int next_bc_index = bytecodeIndex + delta;
+  TR::BytecodeBuilder *jumpTo = bytecodeBuilderTable[next_bc_index];
+
+  TR::IlValue *right = popInt48(builder);
+  TR::IlValue *left = popInt48(builder);
+
+  builder->IfCmpGreaterThan(jumpTo, left, right);
+  builder->AddFallThroughBuilder(nextBuilder);
+}
+
+void MethodBuilder::handle_bc_jmp_ge(
+    TR::BytecodeBuilder *builder,
+    const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+    void *program, long bytecodeIndex,
+    TR::BytecodeBuilder *nextBuilder) {
+  Instruction *instruction = static_cast<Instruction*>((void*)(static_cast<instruction_type*>(program) + bytecodeIndex));
+  int delta = instruction->immediate() + 1;
   int next_bc_index = bytecodeIndex + delta;
   TR::BytecodeBuilder *jumpTo = bytecodeBuilderTable[next_bc_index];
 

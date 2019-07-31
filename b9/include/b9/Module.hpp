@@ -82,12 +82,11 @@ class ModuleMmap {
 
     checkAddress(funcPtr);
     std::string toReturn;
-    std::uint32_t stringN = *((std::uint32_t*)(_currentPtr));
-    _currentPtr = static_cast<char*>(_currentPtr) + sizeof(std::uint32_t);
+    std::uint32_t stringN = *((instruction_type*)(_currentPtr));
+    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
     char* backStr = static_cast<char*>(_currentPtr);
 
     for (int i = 0; i < stringN; i++) {
-        char curChar = *backStr;
         toReturn.push_back(*backStr);
         backStr += sizeof(char);
     }
@@ -114,8 +113,8 @@ class ModuleMmap {
 
     checkAddress((void*)((size_t)funcPtr + offset));
 
-	  std::uint32_t *toReturn = ((std::uint32_t *)_currentPtr);
-	  _currentPtr = static_cast<char*>(_currentPtr) + INSTRUCTION_SIZE; // TODO: Might not need this
+	  std::uint32_t *toReturn = ((instruction_type *)_currentPtr);
+	  _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1; // TODO: Might not need this
 	  return toReturn;
   }
 
@@ -132,8 +131,8 @@ class ModuleMmap {
 
   bool insertString(std::string str) {
     std::uint32_t funcLength = str.length();
-    *static_cast<std::uint32_t*>(_currentPtr) = funcLength; 
-    _currentPtr = static_cast<char*>(_currentPtr) + INSTRUCTION_SIZE;
+    *static_cast<instruction_type*>(_currentPtr) = funcLength; 
+    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
 
     std::memcpy(_currentPtr, str.c_str(), funcLength);
 
@@ -144,19 +143,19 @@ class ModuleMmap {
 
   bool insertParams(std::uint32_t nparams, std::uint32_t nlocals) {
     *static_cast<std::uint32_t*>(_currentPtr) = nparams;
-    _currentPtr = static_cast<char*>(_currentPtr) + INSTRUCTION_SIZE;
+    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
     *static_cast<std::uint32_t*>(_currentPtr) = nlocals;
-    _currentPtr = static_cast<char*>(_currentPtr) + INSTRUCTION_SIZE;
+    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
 
     return true;
   }
 
-  bool insertInstruction(std::uint32_t instruction) {
+  bool insertInstruction(instruction_type instruction) {
     std::cout << "Inserting instruction 0x" << std::hex << instruction << std::dec 
               << ", at address: " << _currentPtr << std::endl;
 
-    *static_cast<std::uint32_t*>(_currentPtr) = instruction;
-    _currentPtr = static_cast<char*>(_currentPtr) + INSTRUCTION_SIZE;
+    *static_cast<instruction_type*>(_currentPtr) = instruction;
+    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
 
     return true;
   }
@@ -167,11 +166,11 @@ class ModuleMmap {
 
   std::uint32_t getNextInt32Val() {
 
-    std::uint32_t myNumber = *((std::uint32_t*)(_currentPtr));
+    std::uint32_t myNumber = *((instruction_type*)(_currentPtr));
     std::cout << "Inside getNextInt32Val(), returning num: 0x" << std::hex << myNumber 
               << std::dec << ", at address: " << _currentPtr << std::endl;
 
-    _currentPtr = static_cast<char*>(_currentPtr) + INSTRUCTION_SIZE;
+    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
 
     return myNumber;
   }

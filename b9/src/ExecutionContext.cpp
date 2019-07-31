@@ -80,34 +80,34 @@ Om::Value ExecutionContext::callJitFunction(JitFunction jitFunction,
 }
 
 StackElement ExecutionContext::interpret(const std::size_t functionIndex) { // TODO: Change to function name
-  auto function = virtualMachine_->getFunction(functionIndex);
+  // auto function = virtualMachine_->getFunction(functionIndex);
   void *funcPtr = virtualMachine_->getFunction(functionIndex, true);
-  auto paramsCount = function->nparams;
-  auto localsCount = function->nlocals;
+  // auto paramsCount = function->nparams;
+  // auto localsCount = function->nlocals;
   auto jitFunction = virtualMachine_->getJitAddress(functionIndex);
 
   std::string funcName = virtualMachine_->getFunctionName(funcPtr);
-  std::uint32_t nparams = virtualMachine_->getFunctionNparams(funcPtr, funcName.size() + 4);
-  std::uint32_t nlocals = virtualMachine_->getFunctionNLocals(funcPtr, funcName.size() + 8);
+  std::uint32_t nparams = virtualMachine_->getFunctionNparams(funcPtr, funcName.size() + INSTRUCTION_SIZE);
+  std::uint32_t nlocals = virtualMachine_->getFunctionNLocals(funcPtr, funcName.size() + INSTRUCTION_SIZE*2);
 
   if (cfg_->debug) {
-    std::cerr << "intepret: " << function->name
-              << " nparams: " << function->nparams << std::endl;
+    std::cerr << "intepret: " << funcName
+              << " nparams: " << nparams << std::endl;
   }
 
   if (jitFunction) {
-    return callJitFunction(jitFunction, paramsCount);
+    return callJitFunction(jitFunction, nparams);
   }
 
   // interpret the method otherwise
-  std::uint32_t *thisInstruction = virtualMachine_->getCurrentInstruction(funcPtr, funcName.size() + 12);
+  std::uint32_t *thisInstruction = virtualMachine_->getCurrentInstruction(funcPtr, funcName.size() + INSTRUCTION_SIZE*3);
   const Instruction *instructionPointer = (const Instruction *)thisInstruction;
   // const Instruction *instructionPointer = function->instructions.data();
 
-  StackElement *params = stack_.top() - paramsCount;
+  StackElement *params = stack_.top() - nparams;
 
-  stack_.pushn(localsCount);  // make room for locals in the stack
-  StackElement *locals = stack_.top() - localsCount;
+  stack_.pushn(nlocals);  // make room for locals in the stack
+  StackElement *locals = stack_.top() - nlocals;
 
   while (*instructionPointer != END_SECTION) {
     switch (instructionPointer->opCode()) {

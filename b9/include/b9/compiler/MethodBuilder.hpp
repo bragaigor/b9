@@ -35,10 +35,18 @@ class MethodBuilder : public TR::MethodBuilder {
 
   /// For a single bytecode, generate the
   bool generateILForBytecode(
+      void *instructionPtr,
       const FunctionDef *function,
       std::vector<TR::BytecodeBuilder *> bytecodeBuilderTable,
       std::size_t instructionIndex,
       TR::BytecodeBuilder *jumpToBuilderForInlinedReturn);
+
+  bool generateILForBytecode(
+        void *funcPtr,
+        std::vector<TR::BytecodeBuilder *> bytecodeBuilderTable,
+        std::size_t instructionIndex,
+        TR::BytecodeBuilder *jumpToBuilderForInlinedReturn,
+        std::size_t numberOfInstructions);
 
   bool inlineProgramIntoBuilder(
       const std::size_t functionIndex, bool isTopLevel,
@@ -143,13 +151,49 @@ class MethodBuilder : public TR::MethodBuilder {
       const std::vector<Instruction> &program, long bytecodeIndex,
       TR::BytecodeBuilder *nextBuilder);
 
+  void handle_bc_jmp(
+      TR::BytecodeBuilder *builder,
+      const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+      void *program, long bytecodeIndex,
+      TR::BytecodeBuilder *nextBuilder);
+  void handle_bc_jmp_eq(
+      TR::BytecodeBuilder *builder,
+      const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+      void *program, long bytecodeIndex,
+      TR::BytecodeBuilder *nextBuilder);
+  void handle_bc_jmp_neq(
+      TR::BytecodeBuilder *builder,
+      const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+      void *program, long bytecodeIndex,
+      TR::BytecodeBuilder *nextBuilder);
+  void handle_bc_jmp_lt(
+      TR::BytecodeBuilder *builder,
+      const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+      void *program, long bytecodeIndex,
+      TR::BytecodeBuilder *nextBuilder);
+  void handle_bc_jmp_le(
+      TR::BytecodeBuilder *builder,
+      const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+      void *program, long bytecodeIndex,
+      TR::BytecodeBuilder *nextBuilder);
+  void handle_bc_jmp_gt(
+      TR::BytecodeBuilder *builder,
+      const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+      void *program, long bytecodeIndex,
+      TR::BytecodeBuilder *nextBuilder);
+  void handle_bc_jmp_ge(
+      TR::BytecodeBuilder *builder,
+      const std::vector<TR::BytecodeBuilder *> &bytecodeBuilderTable,
+      void *program, long bytecodeIndex,
+      TR::BytecodeBuilder *nextBuilder);
+
   const GlobalTypes &globalTypes() { return globalTypes_; }
 
   VirtualMachine &virtualMachine_;
   const GlobalTypes &globalTypes_;
   const Config &cfg_;
   const std::size_t functionIndex_;
-  const std::string functionName_;
+  std::string functionName_;
   void *functionPtr_;
   std::vector<std::string> params_;
   std::vector<std::string> locals_;

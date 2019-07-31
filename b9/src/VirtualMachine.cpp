@@ -97,6 +97,7 @@ const std::string &VirtualMachine::getString(int index) {
 }
 
 std::size_t VirtualMachine::getFunctionCount() {
+  // return moduleMmap_->getNumberOfFunctions();
   return module_->functions.size();
 }
 
@@ -105,9 +106,12 @@ void VirtualMachine::generateAllCode() {
   auto functionIndex = 0;  // 0 index for <script>
 
   while (functionIndex < getFunctionCount()) {
-    if (cfg_.debug)
-      std::cout << "\nJitting function: " << getFunction(functionIndex)->name
+    void *funcPtr = getFunction(functionIndex, true);
+    if (cfg_.debug) {
+      std::string funcName = getFunctionName(funcPtr);
+      std::cout << "\nJitting function: " << funcName
                 << " of index: " << functionIndex << std::endl;
+    }
     auto func = compiler_->generateCode(functionIndex);
     compiledFunctions_.push_back(func);
     ++functionIndex;
@@ -145,27 +149,30 @@ StackElement VirtualMachine::run(const std::size_t functionIndex,
   auto function = getFunction(functionIndex);
   void *funcPtr = getFunction(functionIndex, true);
 
+  std::string funcName = getFunctionName(funcPtr);
+  std::uint32_t nparams = getFunctionNparams(funcPtr, funcName.size() + INSTRUCTION_SIZE);
+
   auto paramsCount = function->nparams;
 
   ExecutionContext *executionContext = new ExecutionContext(*this, cfg_);
 
   if (cfg_.verbose) {
     std::cout << "+++++++++++++++++++++++" << std::endl;
-    std::cout << "Running function: " << function->name
-              << " nparams: " << paramsCount << std::endl;
+    std::cout << "Running function: " << funcName
+              << " nparams: " << nparams << std::endl;
   }
 
-  if (paramsCount != usrArgs.size()) {
+  if (nparams != usrArgs.size()) {
     std::stringstream ss;
     ss << function->name << " - Got " << usrArgs.size()
-       << " arguments, expected " << paramsCount;
+       << " arguments, expected " << nparams;
     std::string message = ss.str();
     throw BadFunctionCallException{message};
   }
 
   // push user defined arguments to send to the program
-  for (std::size_t i = 0; i < paramsCount; i++) {
-    auto idx = paramsCount - i - 1;
+  for (std::size_t i = 0; i < nparams; i++) {
+    auto idx = nparams - i - 1;
     auto arg = usrArgs[idx];
     executionContext->push(arg);
   }

@@ -65,19 +65,24 @@ Compiler::Compiler(VirtualMachine &virtualMachine, const Config &cfg)
       cfg_(cfg) {}
 
 JitFunction Compiler::generateCode(const std::size_t functionIndex) {
-  const FunctionDef *function = virtualMachine_.getFunction(functionIndex);
+  // const FunctionDef *function = virtualMachine_.getFunction(functionIndex);
   MethodBuilder methodBuilder(virtualMachine_, functionIndex);
+  void *funcPtr = virtualMachine_.getFunction(functionIndex, true);
+  std::cout << "Inside Compiler::generateCode() just returned from MethodBuilder Constructor!!! \n";
+  std::string funcName = virtualMachine_.getFunctionName(funcPtr);
+  std::uint32_t nparams = virtualMachine_.getFunctionNparams(funcPtr, funcName.size() + INSTRUCTION_SIZE);
+  std::cout << "Inside Compiler::generateCode() what now????????????????? \n";
 
   if (cfg_.verbose)
-    std::cout << "MethodBuilder for function: " << function->name
+    std::cout << "MethodBuilder for function: " << funcName
               << " is constructed" << std::endl;
 
   uint8_t *result = nullptr;
   auto rc = compileMethodBuilder(&methodBuilder, &result);
 
   if (rc != 0) {
-    std::cout << "Failed to compile function: " << function->name
-              << " nparams: " << function->nparams << std::endl;
+    std::cout << "Failed to compile function: " << funcName
+              << " nparams: " << nparams << std::endl;
     throw b9::CompilationException{"IL generation failed"};
   }
 
