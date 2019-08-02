@@ -104,7 +104,7 @@ class VirtualMachine {
 
   void generateAllCode();
 
-  const std::string &getString(int index);
+  const char *getString(int index);
 
   const std::shared_ptr<const Module> &module() { return module_; }
 

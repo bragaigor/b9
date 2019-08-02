@@ -15,11 +15,12 @@ void readStringSection(std::istream &in, std::vector<std::string> &strings, std:
   if (!readNumber(in, stringCount)) {
     throw DeserializeException{"Error reading string count"};
   }
+  moduleMmap->recordStringSection(stringCount);
   for (uint32_t i = 0; i < stringCount; i++) {
     std::string toRead;
     readString(in, toRead);
     strings.push_back(toRead);
-    moduleMmap->insertString(toRead);
+    moduleMmap->insertStringSection(toRead, i);
   }
 }
 

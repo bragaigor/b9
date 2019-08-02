@@ -118,6 +118,28 @@ class ModuleMmap {
 	  return toReturn;
   }
 
+  const char *getString(int index) {
+    void *indexPtr = static_cast<uintptr_t*>(_strSection) + index;
+    uintptr_t func = *((uintptr_t*)(indexPtr));
+    void *funcPtr = (void*)func;
+    funcPtr = static_cast<instruction_type*>(funcPtr) + 1; // Jump function length
+    const char *strPtr = static_cast<const char *>(funcPtr);
+    
+    return strPtr;
+  }
+
+  void recordStringSection(std::uint32_t stringCount) {
+    _strSection = _currentPtr;
+
+    // Reserve placeholders in mmap to hold addresses to strings 
+    for (int i = 0; i < stringCount; i++)
+    {
+      *static_cast<uintptr_t*>(_currentPtr) = 0; 
+      _currentPtr = static_cast<uintptr_t*>(_currentPtr) + 1;
+    }
+    
+  }
+
   bool insertNewFunc(std::string &functionName) {
     std::cout << "Inside insertNewFunc(): insert idx: " << funcAddrs_.size() << ", with val: " 
                               << functionName << ", at address: " << _currentPtr << std::endl;
@@ -129,16 +151,30 @@ class ModuleMmap {
     return true;
   }
 
-  bool insertString(std::string str) {
+  bool insertStringSection(std::string str, std::uint32_t index) {
+    strings.push_back(str);
+
+    void *strPtr = insertString(str);
+    void *indexPtr = static_cast<uintptr_t*>(_strSection) + index;
+    *static_cast<uintptr_t*>(indexPtr) = (uintptr_t)strPtr;
+
+    return true;
+  }
+
+  void *insertString(std::string str) {
     std::uint32_t funcLength = str.length();
-    *static_cast<instruction_type*>(_currentPtr) = funcLength; 
+    void *strPtr = _currentPtr;
+    *static_cast<instruction_type*>(_currentPtr) = funcLength+1; 
     _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
 
     std::memcpy(_currentPtr, str.c_str(), funcLength);
 
     _currentPtr = static_cast<char*>(_currentPtr) + funcLength;
+    std::memcpy(_currentPtr, "\0", 1);
 
-    return true;
+    _currentPtr = static_cast<char*>(_currentPtr) + 1;
+
+    return strPtr;
   }
 
   bool insertParams(std::uint32_t nparams, std::uint32_t nlocals) {
@@ -175,6 +211,8 @@ class ModuleMmap {
     return myNumber;
   }
 
+  std::vector<std::string> strings;
+
   private:
 
   void checkAddress(void *funcPtr) {
@@ -190,6 +228,7 @@ class ModuleMmap {
 
   std::vector<void*> funcAddrs_;
   void* _currentPtr;
+  void* _strSection;
   std::uint32_t _size;
 };
 

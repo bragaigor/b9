@@ -110,6 +110,7 @@ StackElement ExecutionContext::interpret(const std::size_t functionIndex) { // T
   StackElement *locals = stack_.top() - nlocals;
 
   while (*instructionPointer != END_SECTION) {
+    std::cout << " >>>>>>>>>> " << std::hex << instructionPointer->raw() << std::dec << std::endl;
     switch (instructionPointer->opCode()) {
       case OpCode::FUNCTION_CALL:
         doFunctionCall(instructionPointer->immediate());
@@ -133,6 +134,7 @@ StackElement ExecutionContext::interpret(const std::size_t functionIndex) { // T
         doDrop();
         break;
       case OpCode::PUSH_FROM_LOCAL:
+        std::cout << "In case OpCode::PUSH_FROM_LOCAL calling doPushFromLocal()\n";
         doPushFromLocal(locals, instructionPointer->immediate());
         break;
       case OpCode::POP_INTO_LOCAL:
@@ -181,6 +183,7 @@ StackElement ExecutionContext::interpret(const std::size_t functionIndex) { // T
         instructionPointer += doJmpLe(instructionPointer->immediate());
         break;
       case OpCode::STR_PUSH_CONSTANT:
+        std::cout << "In case OpCode::STR_PUSH_CONSTANT calling doStrPushConstant()\n";
         doStrPushConstant(instructionPointer->immediate());
         break;
       case OpCode::NEW_OBJECT:
@@ -190,6 +193,7 @@ StackElement ExecutionContext::interpret(const std::size_t functionIndex) { // T
         doPushFromObject(Om::Id(instructionPointer->immediate()));
         break;
       case OpCode::POP_INTO_OBJECT:
+        std::cout << "In case OpCode::POP_INTO_OBJECT calling doPopIntoObject()\n";
         doPopIntoObject(Om::Id(instructionPointer->immediate()));
         break;
       case OpCode::CALL_INDIRECT:
@@ -312,9 +316,10 @@ Immediate ExecutionContext::doJmpGt(Immediate delta) {
       return delta;
     }
   } else if (right.isUint48() && left.isUint48()) {
-    const auto &strRight = virtualMachine_->getString(right.getUint48());
-    const auto &strLeft = virtualMachine_->getString(left.getUint48());
-    if (strLeft > strRight) {
+    const char *strRight = virtualMachine_->getString(right.getUint48());
+    const char *strLeft = virtualMachine_->getString(left.getUint48());
+    // if (strLeft > strRight) {
+    if (strcmp(strLeft, strRight) > 0) {
       return delta;
     }
   } else {
@@ -334,9 +339,10 @@ Immediate ExecutionContext::doJmpGe(Immediate delta) {
       return delta;
     }
   } else if (right.isUint48() && left.isUint48()) {
-    const auto &strRight = virtualMachine_->getString(right.getUint48());
-    const auto &strLeft = virtualMachine_->getString(left.getUint48());
-    if (strLeft >= strRight) {
+    const char *strRight = virtualMachine_->getString(right.getUint48());
+    const char *strLeft = virtualMachine_->getString(left.getUint48());
+    // if (strLeft >= strRight) {
+    if (strcmp(strLeft, strRight) >= 0) {
       return delta;
     }
   } else {
@@ -356,9 +362,10 @@ Immediate ExecutionContext::doJmpLt(Immediate delta) {
       return delta;
     }
   } else if (right.isUint48() && left.isUint48()) {
-    const auto &strRight = virtualMachine_->getString(right.getUint48());
-    const auto &strLeft = virtualMachine_->getString(left.getUint48());
-    if (strLeft < strRight) {
+    const char *strRight = virtualMachine_->getString(right.getUint48());
+    const char *strLeft = virtualMachine_->getString(left.getUint48());
+    // if (strLeft < strRight) {
+    if (strcmp(strLeft, strRight) < 0) {
       return delta;
     }
   } else {
@@ -378,9 +385,10 @@ Immediate ExecutionContext::doJmpLe(Immediate delta) {
       return delta;
     }
   } else if (right.isUint48() && left.isUint48()) {
-    const auto &strRight = virtualMachine_->getString(right.getUint48());
-    const auto &strLeft = virtualMachine_->getString(left.getUint48());
-    if (strLeft <= strRight) {
+    const char *strRight = virtualMachine_->getString(right.getUint48());
+    const char *strLeft = virtualMachine_->getString(left.getUint48());
+    // if (strLeft <= strRight) {
+    if (strcmp(strLeft, strRight) <= 0) {
       return delta;
     }
   } else {
@@ -404,6 +412,7 @@ void ExecutionContext::doNewObject() {
 
 // ( object -- value )
 void ExecutionContext::doPushFromObject(Om::Id slotId) {
+  std::cout << "Inside ExecutionContext::doPushFromObject()\n";
   auto value = stack_.pop();
   if (!value.isRef()) {
     throw std::runtime_error("Accessing non-object value as an object.");
@@ -422,17 +431,19 @@ void ExecutionContext::doPushFromObject(Om::Id slotId) {
 
 // ( object value -- )
 void ExecutionContext::doPopIntoObject(Om::Id slotId) {
+  std::cout << "Inside ExecutionContext::doPopIntoObject()\n";
   if (!stack_.peek().isRef()) {
     throw std::runtime_error("Accessing non-object as an object");
   }
 
-  std::size_t offset = 0;
+  // std::size_t offset = 0;
   auto object = stack_.pop().getRef<Om::Object>();
 
   Om::SlotDescriptor descriptor;
   bool found = Om::lookupSlot(*this, object, slotId, descriptor);
 
   if (!found) {
+    std::cout << "Object not found!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n";
     static constexpr Om::SlotType type(Om::Id(0), Om::CoreType::VALUE);
 
     Om::RootRef<Om::Object> root(*this, object);

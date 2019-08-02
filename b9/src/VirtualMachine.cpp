@@ -92,8 +92,14 @@ JitFunction VirtualMachine::generateCode(const std::size_t functionIndex) {
   }
 }
 
-const std::string &VirtualMachine::getString(int index) {
-  return module_->strings[index];
+// TODO: Change this to point to the string section of the new Module!!!! 
+const char *VirtualMachine::getString(int index) {
+  std::cout << "Inside VirtualMachine::getString()\n";
+  std::cout << "Returning string: " << moduleMmap_->strings[index] << "\n";
+  std::cout << " ??????????????????? Returning string: " << moduleMmap_->getString(index) << "\n";
+  return moduleMmap_->getString(index);
+  // return moduleMmap_->strings[index];
+  // return module_->strings[index];
 }
 
 std::size_t VirtualMachine::getFunctionCount() {
@@ -146,13 +152,13 @@ std::uint32_t VirtualMachine::getFunctionNLocals(void *funcPtr, std::uint32_t of
 
 StackElement VirtualMachine::run(const std::size_t functionIndex,
                                  const std::vector<StackElement> &usrArgs) {
-  auto function = getFunction(functionIndex);
+  // auto function = getFunction(functionIndex);
   void *funcPtr = getFunction(functionIndex, true);
 
   std::string funcName = getFunctionName(funcPtr);
   std::uint32_t nparams = getFunctionNparams(funcPtr, funcName.size() + INSTRUCTION_SIZE);
 
-  auto paramsCount = function->nparams;
+  auto paramsCount = nparams;
 
   ExecutionContext *executionContext = new ExecutionContext(*this, cfg_);
 
@@ -164,12 +170,13 @@ StackElement VirtualMachine::run(const std::size_t functionIndex,
 
   if (nparams != usrArgs.size()) {
     std::stringstream ss;
-    ss << function->name << " - Got " << usrArgs.size()
+    ss << funcName << " - Got " << usrArgs.size()
        << " arguments, expected " << nparams;
     std::string message = ss.str();
     throw BadFunctionCallException{message};
   }
 
+  // std::cout << "Their n params: " << function->nparams << ", my nparams: " << nparams << std::endl;
   // push user defined arguments to send to the program
   for (std::size_t i = 0; i < nparams; i++) {
     auto idx = nparams - i - 1;
