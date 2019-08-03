@@ -95,8 +95,7 @@ JitFunction VirtualMachine::generateCode(const std::size_t functionIndex) {
 // TODO: Change this to point to the string section of the new Module!!!! 
 const char *VirtualMachine::getString(int index) {
   std::cout << "Inside VirtualMachine::getString()\n";
-  std::cout << "Returning string: " << moduleMmap_->strings[index] << "\n";
-  std::cout << " ??????????????????? Returning string: " << moduleMmap_->getString(index) << "\n";
+  std::cout << " ??????????????? Returning string: " << moduleMmap_->getString(index) << "\n";
   return moduleMmap_->getString(index);
   // return moduleMmap_->strings[index];
   // return module_->strings[index];

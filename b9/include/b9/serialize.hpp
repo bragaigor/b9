@@ -47,7 +47,7 @@ void writeSections(std::ostream &out, const Module &module);
 
 void writeHeader(std::ostream &out);
 
-void serialize(std::ostream &out, const Module &module);
+void serialize(std::ostream &out, const Module &module, std::shared_ptr<ModuleMmap> &moduleMmap);
 
 }  // namespace b9
 

@@ -176,13 +176,16 @@ bool MethodBuilder::inlineProgramIntoBuilder(
   std::string funcName = virtualMachine_.getFunctionName(funcPtr);
   std::uint32_t nparams = virtualMachine_.getFunctionNparams(funcPtr, funcName.size() + INSTRUCTION_SIZE);
   std::uint32_t nlocals = virtualMachine_.getFunctionNLocals(funcPtr, funcName.size() + INSTRUCTION_SIZE*2);
-  std::uint32_t *thisInstruction = virtualMachine_.getCurrentInstruction(funcPtr, funcName.size() + INSTRUCTION_SIZE*3);
+  auto numberOfBytecodes2 = virtualMachine_.getNextInt32(); // TODO: Change name to numberOfBytecodes.
+  std::uint32_t *thisInstruction = virtualMachine_.getCurrentInstruction(funcPtr, funcName.size() + INSTRUCTION_SIZE*4);
   const Instruction *instructionPointer = (const Instruction *)thisInstruction;
 
   // Create a BytecodeBuilder for each Bytecode
   auto numberOfBytecodes = function->instructions.size();
 
-  if (numberOfBytecodes == 0) {
+  std::cout << "Real number of bytecodes: " << numberOfBytecodes << ", my calculated number of bytecodes: " << numberOfBytecodes2 << std::endl;
+
+  if (numberOfBytecodes2 == 0) {
     if (cfg_.verbose) {
       std::cerr << "unexpected EMPTY function body for " << funcName
                 << std::endl;
@@ -191,14 +194,14 @@ bool MethodBuilder::inlineProgramIntoBuilder(
   }
 
   if (cfg_.verbose)
-    std::cout << "Creating " << numberOfBytecodes << " bytecode builders"
+    std::cout << "Creating " << numberOfBytecodes2 << " bytecode builders"
               << std::endl;
 
   // create the builders
 
   std::vector<TR::BytecodeBuilder *> builderTable;
-  builderTable.reserve(numberOfBytecodes);
-  for (int i = 0; i < numberOfBytecodes; i++) {
+  builderTable.reserve(numberOfBytecodes2);
+  for (int i = 0; i < numberOfBytecodes2; i++) {
     builderTable.push_back(OrphanBytecodeBuilder(i));
   }
 
@@ -215,7 +218,7 @@ bool MethodBuilder::inlineProgramIntoBuilder(
   }
 
   std::cout << "Original number of bytecodes for function: " << funcName << ", is : "
-            << numberOfBytecodes << ", while the calculated one was: " << opcodeCount << std::endl;
+            << numberOfBytecodes2 << ", while the calculated one was: " << opcodeCount << std::endl;
 
   // Get the first Builder
 
@@ -236,7 +239,7 @@ bool MethodBuilder::inlineProgramIntoBuilder(
       //                           jumpToBuilderForInlinedReturn);
 
       ok = generateILForBytecode(thisInstruction, builderTable, index, // This is the index of the bytecode NOT the function 
-                                jumpToBuilderForInlinedReturn, numberOfBytecodes);
+                                jumpToBuilderForInlinedReturn, numberOfBytecodes2);
       if (!ok) break;
     }
   return ok;

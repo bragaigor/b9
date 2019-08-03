@@ -85,8 +85,15 @@ void writeHeader(std::ostream &out) {
   }
 }
 
-void serialize(std::ostream &out, const Module &module) {
+void writeModuleSize(std::ostream &out, uint32_t moduleSize) {
+  if (!writeNumber(out, moduleSize)) {
+    throw SerializeException("Error writing module size");
+  }
+}
+
+void serialize(std::ostream &out, const Module &module, std::shared_ptr<ModuleMmap> &moduleMmap) {
   // TODO: Make it look like compile.js or no?
+  writeModuleSize(out, 256); // TODO: Pass proper module size
   writeHeader(out);
   writeSections(out, module);
 }

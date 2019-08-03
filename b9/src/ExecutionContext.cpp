@@ -81,6 +81,7 @@ Om::Value ExecutionContext::callJitFunction(JitFunction jitFunction,
 
 StackElement ExecutionContext::interpret(const std::size_t functionIndex) { // TODO: Change to function name
   // auto function = virtualMachine_->getFunction(functionIndex);
+  std::cout << "About to interpret function with index: " << functionIndex << std::endl;
   void *funcPtr = virtualMachine_->getFunction(functionIndex, true);
   // auto paramsCount = function->nparams;
   // auto localsCount = function->nlocals;
@@ -98,9 +99,9 @@ StackElement ExecutionContext::interpret(const std::size_t functionIndex) { // T
   if (jitFunction) {
     return callJitFunction(jitFunction, nparams);
   }
-
+  virtualMachine_->getNextInt32(); // This holds instruction count
   // interpret the method otherwise
-  std::uint32_t *thisInstruction = virtualMachine_->getCurrentInstruction(funcPtr, funcName.size() + INSTRUCTION_SIZE*3);
+  std::uint32_t *thisInstruction = virtualMachine_->getCurrentInstruction(funcPtr, funcName.size() + INSTRUCTION_SIZE*4);
   const Instruction *instructionPointer = (const Instruction *)thisInstruction;
   // const Instruction *instructionPointer = function->instructions.data();
 

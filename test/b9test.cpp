@@ -166,6 +166,7 @@ TEST(MyTest, arguments) {
   std::string funcName = "add_args";
   module->insertNewFunc(funcName);
   module->insertParams(2,0); // nparams, nlocals
+  module->reserveAddrInstructions();
   module->insertInstruction((instruction_type)((RawInstruction(OpCode::PUSH_FROM_PARAM) << OPCODE_SHIFT) | (0 & IMMEDIATE_MASK))); // store object into var0
   module->insertInstruction((instruction_type)((RawInstruction(OpCode::PUSH_FROM_PARAM) << OPCODE_SHIFT) | (1 & IMMEDIATE_MASK))); // push "Hello, World"
   module->insertInstruction((instruction_type)(RawInstruction(OpCode::INT_ADD) << OPCODE_SHIFT));                           // GC. Object is kept alive by var0
@@ -174,6 +175,7 @@ TEST(MyTest, arguments) {
   module->insertInstruction((instruction_type)(RawInstruction(OpCode::DROP) << OPCODE_SHIFT));  
   module->insertInstruction((instruction_type)(RawInstruction(OpCode::FUNCTION_RETURN) << OPCODE_SHIFT));                          // finish with constant 0
   module->insertInstruction((instruction_type)((RawInstruction(OpCode::END_SECTION) << OPCODE_SHIFT) | (0 & IMMEDIATE_MASK)));
+  module->storeInstructionsCount(8);
 
   vm.load(m, module);
   // auto r = vm.run("add_args", {{AS_INT48, 1}, {AS_INT48, 2}});
@@ -191,9 +193,11 @@ TEST(MyTest, jitSimpleProgram) {
   std::string funcName = "add";
   module->insertNewFunc(funcName);
   module->insertParams(0,0); // nparams, nlocals
+  module->reserveAddrInstructions();
   module->insertInstruction((instruction_type)((RawInstruction(OpCode::INT_PUSH_CONSTANT) << OPCODE_SHIFT) | (0xdead & IMMEDIATE_MASK)));
   module->insertInstruction((instruction_type)(RawInstruction(OpCode::FUNCTION_RETURN) << OPCODE_SHIFT));
   module->insertInstruction((instruction_type)((RawInstruction(OpCode::END_SECTION) << OPCODE_SHIFT) | (0 & IMMEDIATE_MASK)));
+  module->storeInstructionsCount(3);
 
   // std::vector<Instruction> i = {{OpCode::INT_PUSH_CONSTANT, 0xdead},
   //                               {OpCode::FUNCTION_RETURN},
@@ -217,9 +221,11 @@ TEST(MyTest, haveAVariable) {
   std::string funcName = "add";
   module->insertNewFunc(funcName);
   module->insertParams(0,0); // nparams, nlocals
+  module->reserveAddrInstructions();
   module->insertInstruction((instruction_type)((RawInstruction(OpCode::INT_PUSH_CONSTANT) << OPCODE_SHIFT) | (0xdead & IMMEDIATE_MASK)));
   module->insertInstruction((instruction_type)(RawInstruction(OpCode::FUNCTION_RETURN) << OPCODE_SHIFT));
   module->insertInstruction((instruction_type)((RawInstruction(OpCode::END_SECTION) << OPCODE_SHIFT) | (0 & IMMEDIATE_MASK)));
+  module->storeInstructionsCount(3);
 
   // std::vector<Instruction> i = {{OpCode::INT_PUSH_CONSTANT, 0xdead},
   //                               {OpCode::FUNCTION_RETURN},
@@ -240,6 +246,7 @@ TEST(ObjectTest, allocateSomething) {
   std::string funcName = "allocate_object";
   module->insertNewFunc(funcName);
   module->insertParams(0,1); // nparams, nlocals
+  module->reserveAddrInstructions();
   module->insertInstruction((instruction_type)(RawInstruction(OpCode::NEW_OBJECT) << OPCODE_SHIFT)); // new object
   module->insertInstruction((instruction_type)((RawInstruction(OpCode::POP_INTO_LOCAL) << OPCODE_SHIFT) | (0 & IMMEDIATE_MASK))); // store object into var0
   module->insertInstruction((instruction_type)((RawInstruction(OpCode::STR_PUSH_CONSTANT) << OPCODE_SHIFT) | (0 & IMMEDIATE_MASK))); // push "Hello, World"
@@ -251,6 +258,7 @@ TEST(ObjectTest, allocateSomething) {
   module->insertInstruction((instruction_type)((RawInstruction(OpCode::PRIMITIVE_CALL) << OPCODE_SHIFT) | (0 & IMMEDIATE_MASK)));  // call b9_prim_print_string
   module->insertInstruction((instruction_type)(RawInstruction(OpCode::FUNCTION_RETURN) << OPCODE_SHIFT));                          // finish with constant 0
   module->insertInstruction((instruction_type)((RawInstruction(OpCode::END_SECTION) << OPCODE_SHIFT) | (0 & IMMEDIATE_MASK)));
+  module->storeInstructionsCount(11);
   module->recordStringSection(1); // There's one string to be inserted
   module->insertStringSection("Hello, World", 0); // Second parameter is the index associated with the string 
 
@@ -284,15 +292,19 @@ TEST(ObjectTest, allocateMultipleStrings) {
   std::string funcName = "allocate_object2";
   module->insertNewFunc(funcName);
   module->insertParams(0,stringCount); // nparams, nlocals
+  uint32_t instructionCount = 0;
+  module->reserveAddrInstructions();
 
   for (int i = 0; i < stringCount; i++) {
     module->insertInstruction((instruction_type)(RawInstruction(OpCode::NEW_OBJECT) << OPCODE_SHIFT)); // new object
     module->insertInstruction((instruction_type)((RawInstruction(OpCode::POP_INTO_LOCAL) << OPCODE_SHIFT) | (i & IMMEDIATE_MASK))); // store object into var[i]
+    instructionCount += 2;
   }
   for (int i = 0; i < stringCount; i++) {
     module->insertInstruction((instruction_type)((RawInstruction(OpCode::STR_PUSH_CONSTANT) << OPCODE_SHIFT) | (i & IMMEDIATE_MASK))); // push string associated with i
     module->insertInstruction((instruction_type)((RawInstruction(OpCode::PUSH_FROM_LOCAL) << OPCODE_SHIFT) | (i & IMMEDIATE_MASK)));   // push var[i] aka object
     module->insertInstruction((instruction_type)((RawInstruction(OpCode::POP_INTO_OBJECT) << OPCODE_SHIFT) | (i & IMMEDIATE_MASK)));   // pop string associated with i into object at slot i
+    instructionCount += 3;
   }
   module->insertInstruction((instruction_type)(RawInstruction(OpCode::SYSTEM_COLLECT) << OPCODE_SHIFT));  
   for (int i = 0; i < stringCount; i++)
@@ -300,11 +312,16 @@ TEST(ObjectTest, allocateMultipleStrings) {
     module->insertInstruction((instruction_type)((RawInstruction(OpCode::PUSH_FROM_LOCAL) << OPCODE_SHIFT) | (i & IMMEDIATE_MASK))); // push object i
     module->insertInstruction((instruction_type)((RawInstruction(OpCode::PUSH_FROM_OBJECT) << OPCODE_SHIFT) | (i & IMMEDIATE_MASK))); // get the string i back
     module->insertInstruction((instruction_type)((RawInstruction(OpCode::PRIMITIVE_CALL) << OPCODE_SHIFT) | (0 & IMMEDIATE_MASK)));  // call b9_prim_print_string
-    if (i < stringCount - 1)
+    instructionCount += 3;
+    if (i < stringCount - 1) {
       module->insertInstruction((instruction_type)(RawInstruction(OpCode::DROP) << OPCODE_SHIFT)); // Drop return value from b9_prim_print_string
+      instructionCount++;
+    }
   }
   module->insertInstruction((instruction_type)(RawInstruction(OpCode::FUNCTION_RETURN) << OPCODE_SHIFT));                          // finish with constant 0
   module->insertInstruction((instruction_type)((RawInstruction(OpCode::END_SECTION) << OPCODE_SHIFT) | (0 & IMMEDIATE_MASK)));
+  instructionCount += 3;
+  module->storeInstructionsCount(instructionCount);
   module->recordStringSection(stringCount); // Specify the number of strings in string section
   module->insertStringSection("Hello, World", 0); // Second parameter is the index associated with the string 
   module->insertStringSection("Hello, Jurassic Park!", 1);

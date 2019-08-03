@@ -24,20 +24,22 @@ void readStringSection(std::istream &in, std::vector<std::string> &strings, std:
   }
 }
 
-bool readInstructions(std::istream &in,
+int readInstructions(std::istream &in,
                       std::vector<Instruction> &instructions,
                       std::shared_ptr<ModuleMmap> &moduleMmap) {
+  int instructionCount = 0;
   do {
     RawInstruction instruction;
     if (!readNumber(in, instruction)) {
-      return false;
+      return -1;
     }
 
     moduleMmap->insertInstruction(instruction);
 
     instructions.emplace_back(instruction);
+    ++instructionCount;
   } while (instructions.back() != END_SECTION);
-  return true;
+  return instructionCount;
 }
 
 void readFunctionData(std::istream &in, FunctionDef &functionDef, std::shared_ptr<ModuleMmap> &moduleMmap) {
@@ -49,6 +51,7 @@ void readFunctionData(std::istream &in, FunctionDef &functionDef, std::shared_pt
             readNumber(in, functionDef.nlocals);
 
   moduleMmap->insertParams(functionDef.nparams, functionDef.nlocals);
+  moduleMmap->reserveAddrInstructions();
 
   if (!ok) {
     throw DeserializeException{"Error reading function data"};
@@ -57,9 +60,11 @@ void readFunctionData(std::istream &in, FunctionDef &functionDef, std::shared_pt
 
 void readFunction(std::istream &in, FunctionDef &functionDef, std::shared_ptr<ModuleMmap> &moduleMmap) {
   readFunctionData(in, functionDef, moduleMmap);
-  if (!readInstructions(in, functionDef.instructions, moduleMmap)) {
+  int instructionCount = readInstructions(in, functionDef.instructions, moduleMmap);
+  if (instructionCount == -1) {
     throw DeserializeException{"Error reading instructions"};
   }
+  moduleMmap->storeInstructionsCount(instructionCount);
 }
 
 void readFunctionSection(std::istream &in,

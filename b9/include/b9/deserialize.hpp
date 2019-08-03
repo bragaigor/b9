@@ -46,7 +46,7 @@ void readString(std::istream &in, std::string &toRead) {
 
 void readStringSection(std::istream &in, std::vector<std::string> &strings, std::shared_ptr<ModuleMmap> &module);
 
-bool readInstructions(std::istream &in, std::vector<Instruction> &instructions, std::shared_ptr<ModuleMmap> &module);
+int readInstructions(std::istream &in, std::vector<Instruction> &instructions, std::shared_ptr<ModuleMmap> &module);
 
 void readFunctionData(std::istream &in, FunctionDef &functionSpec, std::shared_ptr<ModuleMmap> &module);
 
