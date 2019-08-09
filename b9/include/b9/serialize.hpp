@@ -20,6 +20,9 @@ bool writeNumber(std::ostream &out, const Number &n) {
 }
 
 inline void writeString(std::ostream &out, std::string toWrite) {
+  if (toWrite[toWrite.size() - 1] == '\0') {
+    toWrite.pop_back(); // Pops null character!!!
+  }
   uint32_t length = toWrite.length();
   if (!writeNumber(out, length)) {
     throw SerializeException{"Error writing string length"};
@@ -31,19 +34,31 @@ inline void writeString(std::ostream &out, std::string toWrite) {
 }
 
 void writeStringSection(std::ostream &out,
-                        const std::vector<std::string> &strings);
+                        const std::vector<std::string> &strings,
+                        std::shared_ptr<ModuleMmap> &moduleMmap);
 
 bool writeInstructions(std::ostream &out,
-                       const std::vector<Instruction> &instructions);
+                       const std::vector<Instruction> &instructions,
+                       std::shared_ptr<ModuleMmap> &moduleMmap,
+                       void *funcPtr,
+                       size_t funcNameLength);
 
-void writeFunctionData(std::ostream &out, const FunctionDef &functionDef);
+void *writeFunctionData(std::ostream &out, 
+                       const FunctionDef &functionDef, 
+                       std::shared_ptr<ModuleMmap> &moduleMmap,
+                       size_t index,
+                       size_t &funcNameLength);
 
-void writeFunction(std::ostream &out, const FunctionDef &functionDef);
+void writeFunction(std::ostream &out, 
+                   const FunctionDef &functionDef, 
+                   std::shared_ptr<ModuleMmap> &moduleMmap,
+                   size_t index);
 
 void writeFunctionSection(std::ostream &out,
-                          const std::vector<FunctionDef> &functions);
+                          const std::vector<FunctionDef> &functions, 
+                          std::shared_ptr<ModuleMmap> &moduleMmap);
 
-void writeSections(std::ostream &out, const Module &module);
+void writeSections(std::ostream &out, const Module &module, std::shared_ptr<ModuleMmap> &moduleMmap);
 
 void writeHeader(std::ostream &out);
 

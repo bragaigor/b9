@@ -38,12 +38,12 @@ class ModuleMmap {
   public:
 
   ~ModuleMmap() {
-    if (_currentPtr != NULL) {
-      munmap(_currentPtr, _size);
+    if (startAddr_ != NULL) {
+      munmap(startAddr_, size_);
     }
   }
 
-  ModuleMmap(std::uint32_t size) : _size(size) {
+  ModuleMmap(std::uint32_t size) : size_(size) {
 
     int protFlags = PROT_WRITE | PROT_READ;
     int flags = MAP_PRIVATE | MAP_ANON;
@@ -61,12 +61,12 @@ class ModuleMmap {
       throw ModuleException{"Error when trying to mmap Module"};
       
     } else {
-      _currentPtr = addr;
+      currentPtr_ = addr;
+      startAddr_ = addr;
       std::cout << "mmap() successfully.\n";
     }
   }
 
-  // TODO: Should we manage all addresses internally? What if mutlple threads were using the same VM? 
   void *getFunction(std::size_t index) {
     if (index >= funcAddrs_.size()) {
       std::stringstream ss;
@@ -74,9 +74,9 @@ class ModuleMmap {
       std::string message = ss.str();
       throw ModuleException{message};
     }
-    _currentPtr = funcAddrs_[index];
+    currentPtr_ = funcAddrs_[index];
 
-    return _currentPtr;
+    return currentPtr_;
   }
 
   // TODO: Get rid of it. Make getFunction return const char* and not address. 
@@ -84,16 +84,16 @@ class ModuleMmap {
 
     checkAddress(funcPtr);
     std::string toReturn;
-    std::uint32_t stringN = *((instruction_type*)(_currentPtr));
-    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
-    char* backStr = static_cast<char*>(_currentPtr);
+    std::uint32_t stringN = *((instruction_type*)(currentPtr_));
+    currentPtr_ = static_cast<instruction_type*>(currentPtr_) + 1;
+    char* backStr = static_cast<char*>(currentPtr_);
 
     for (int i = 0; i < stringN; i++) {
         toReturn.push_back(*backStr);
         backStr += sizeof(char);
     }
     
-    _currentPtr = static_cast<char*>(_currentPtr) + (sizeof(char) * stringN);
+    currentPtr_ = static_cast<char*>(currentPtr_) + (sizeof(char) * stringN);
     std::cout << "Inside Module::getFunctionName() string length: " << stringN 
                               << ", string read: " << toReturn << std::endl;
     return toReturn;
@@ -115,15 +115,14 @@ class ModuleMmap {
 
     checkAddress((void*)((size_t)funcPtr + offset));
 
-	  std::uint32_t *toReturn = ((instruction_type *)_currentPtr);
-	  _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1; // TODO: Might not need this
+	  std::uint32_t *toReturn = ((instruction_type *)currentPtr_);
+	  currentPtr_ = static_cast<instruction_type*>(currentPtr_) + 1; // TODO: Might not need this
 	  return toReturn;
   }
 
   const char *getString(int index) {
-    //_strSection points at the beginning of the string section and the first slot holds the count of strings
-    void *strSection = static_cast<instruction_type*>(_strSection) + 1;
-
+    //strSection_ points at the beginning of the string section and the first slot holds the count of strings
+    void *strSection = static_cast<instruction_type*>(strSection_) + 1;
     void *indexPtr = static_cast<uintptr_t*>(strSection) + index;
     uintptr_t func = *((uintptr_t*)(indexPtr));
     void *funcPtr = (void*)func;
@@ -134,40 +133,37 @@ class ModuleMmap {
   }
 
   void recordStringSection(std::uint32_t stringCount) {
-    _strSection = _currentPtr;
+    strSection_ = currentPtr_;
+    std::cout << "Storing uint32_t: " << stringCount << " at: " << currentPtr_ << std::endl;
 
-    std::cout << "Storing uint32_t: " << stringCount << " at: " << _currentPtr << std::endl;
-
-    *static_cast<instruction_type*>(_currentPtr) = stringCount; 
-    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
+    *static_cast<instruction_type*>(currentPtr_) = stringCount; 
+    currentPtr_ = static_cast<instruction_type*>(currentPtr_) + 1;
 
     // Reserve placeholders in mmap to hold addresses to strings 
     for (int i = 0; i < stringCount; i++)
     {
-      *static_cast<uintptr_t*>(_currentPtr) = 0; 
-      _currentPtr = static_cast<uintptr_t*>(_currentPtr) + 1;
+      *static_cast<uintptr_t*>(currentPtr_) = 0; 
+      currentPtr_ = static_cast<uintptr_t*>(currentPtr_) + 1;
     }
   }
 
   void *getStringSection() {
-    return _strSection;
+    return strSection_;
   }
 
   bool insertNewFunc(std::string &functionName) {
     std::cout << "Inside insertNewFunc(): insert idx: " << funcAddrs_.size() << ", with val: " 
-                              << functionName << ", at address: " << _currentPtr << std::endl;
+                              << functionName << ", at address: " << currentPtr_ << std::endl;
     std::cout << "Function name length: " << functionName.length() << ", function name: " 
               << functionName << std::endl;
 
-    funcAddrs_.push_back(_currentPtr);
+    funcAddrs_.push_back(currentPtr_);
     insertString(functionName);
     return true;
   }
 
   bool insertStringSection(std::string str, std::uint32_t index) {
-    // strings.push_back(str);
-
-    void *strSection = static_cast<instruction_type*>(_strSection) + 1;
+    void *strSection = static_cast<instruction_type*>(strSection_) + 1;
 
     void *strPtr = insertString(str);
     void *indexPtr = static_cast<uintptr_t*>(strSection) + index;
@@ -178,31 +174,29 @@ class ModuleMmap {
 
   void *insertString(std::string str) {
     std::uint32_t funcLength = str.length();
-    void *strPtr = _currentPtr;
-    *static_cast<instruction_type*>(_currentPtr) = funcLength+1; 
-    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
+    void *strPtr = currentPtr_;
+    *static_cast<instruction_type*>(currentPtr_) = funcLength+1; 
+    currentPtr_ = static_cast<instruction_type*>(currentPtr_) + 1;
+    std::memcpy(currentPtr_, str.c_str(), funcLength);
 
-    std::memcpy(_currentPtr, str.c_str(), funcLength);
+    currentPtr_ = static_cast<char*>(currentPtr_) + funcLength;
+    std::memcpy(currentPtr_, "\0", 1);
 
-    _currentPtr = static_cast<char*>(_currentPtr) + funcLength;
-    std::memcpy(_currentPtr, "\0", 1);
-
-    _currentPtr = static_cast<char*>(_currentPtr) + 1;
-
+    currentPtr_ = static_cast<char*>(currentPtr_) + 1;
     return strPtr;
   }
 
   // TODO: Should we reserve 32 or 64 bits for the instructions count???
   bool reserveAddrInstructions() {
-    std::cout << "Reserving addrss: " << _currentPtr << " for future instruction count\n";
-    *static_cast<instruction_type*>(_currentPtr) = INSTRUCTION_COUNT_PLACE_HOLDER; 
-    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
+    std::cout << "Reserving addrss: " << currentPtr_ << " for future instruction count\n";
+    *static_cast<instruction_type*>(currentPtr_) = INSTRUCTION_COUNT_PLACE_HOLDER; 
+    currentPtr_ = static_cast<instruction_type*>(currentPtr_) + 1;
 
     return true;
   }
 
   bool storeInstructionsCount(std::uint32_t count) {
-    void *targetAddress = static_cast<instruction_type*>(_currentPtr) - (count + 1);
+    void *targetAddress = static_cast<instruction_type*>(currentPtr_) - (count + 1);
     std::cout << "In storeInstructionsCount(). Storing value: " << count << " at address: " << targetAddress << "\n";
     std::uint32_t prevCount = *((instruction_type*)(targetAddress));
     if (prevCount != INSTRUCTION_COUNT_PLACE_HOLDER) {
@@ -213,25 +207,25 @@ class ModuleMmap {
   }
 
   bool insertParams(std::uint32_t nparams, std::uint32_t nlocals) {
-    *static_cast<std::uint32_t*>(_currentPtr) = nparams;
-    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
-    *static_cast<std::uint32_t*>(_currentPtr) = nlocals;
-    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
+    *static_cast<std::uint32_t*>(currentPtr_) = nparams;
+    currentPtr_ = static_cast<instruction_type*>(currentPtr_) + 1;
+    *static_cast<std::uint32_t*>(currentPtr_) = nlocals;
+    currentPtr_ = static_cast<instruction_type*>(currentPtr_) + 1;
 
     return true;
   }
 
   bool insertInstruction(instruction_type instruction) {
     std::cout << "Inserting instruction 0x" << std::hex << instruction << std::dec 
-              << ", at address: " << _currentPtr << std::endl;
+              << ", at address: " << currentPtr_ << std::endl;
 
-    *static_cast<instruction_type*>(_currentPtr) = instruction;
-    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
+    *static_cast<instruction_type*>(currentPtr_) = instruction;
+    currentPtr_ = static_cast<instruction_type*>(currentPtr_) + 1;
 
     return true;
   }
 
-  std::uint32_t getNumberOfFunctions() {
+  std::uint32_t getNumberOfFunctions() const {
     return funcAddrs_.size();
   }
 
@@ -241,38 +235,38 @@ class ModuleMmap {
 
   std::uint32_t getNextInt32Val() {
 
-    std::uint32_t myNumber = *((instruction_type*)(_currentPtr));
+    std::uint32_t myNumber = *((instruction_type*)(currentPtr_));
     std::cout << "Inside getNextInt32Val(), returning num: 0x" << std::hex << myNumber 
-              << std::dec << ", at address: " << _currentPtr << std::endl;
+              << std::dec << ", at address: " << currentPtr_ << std::endl;
 
-    _currentPtr = static_cast<instruction_type*>(_currentPtr) + 1;
+    currentPtr_ = static_cast<instruction_type*>(currentPtr_) + 1;
 
     return myNumber;
   }
 
   bool hasStringSection() {
-    return _strSection != NULL;
+    return strSection_ != NULL;
   }
-
-  // std::vector<std::string> strings;
 
   private:
 
   void checkAddress(void *funcPtr) {
 
-    if ((size_t)funcPtr != (size_t)_currentPtr) {
+    if ((size_t)funcPtr != (size_t)currentPtr_) {
       std::stringstream ss;
       ss << "Functions should point to the same address. Param: " << funcPtr 
-          << ", local address: " << _currentPtr;
+          << ", local address: " << currentPtr_;
       std::string message = ss.str();
       throw ModuleException{message};
     }
   }
 
   std::vector<void*> funcAddrs_; // vector of pointers to functions
-  void* _currentPtr; // Points to current instruction 
-  void* _strSection; // Points to the start of the string section
-  std::uint32_t _size; // Holds the size necessary to mmap and munmap the module
+  std::vector<const char *> strings_; // vector of strings
+  void* currentPtr_; // Points to current instruction 
+  void* strSection_; // Points to the start of the string section
+  void* startAddr_;  // Points to the beginning of the module
+  std::uint32_t size_; // Holds the size necessary to mmap and munmap the module
 };
 
 inline void operator<<(std::ostream& out, const FunctionDef& f) {
@@ -329,7 +323,6 @@ inline void operator<<(std::ostream& out, const Module& m) {
 inline void operator<<(std::ostream& out, ModuleMmap& m) {
 
   for (size_t i = 0; i < m.getNumberOfFunctions(); i++) {
-
     void *currFunc = m.getFunction(i);
     std::string funcName = m.getFunctionName(currFunc);
     std::uint32_t nparams = m.getFunctionNparams(currFunc, funcName.size() + INSTRUCTION_SIZE);
@@ -365,13 +358,24 @@ inline bool operator==(const Module& lhs, const Module& rhs) {
 
 inline bool operator==(ModuleMmap& lhs, ModuleMmap& rhs) {
 
+  if (&lhs == &rhs) {
+    std::cout << "lhs address: " << &lhs << ", rhs address: " << &rhs << std::endl;
+    return true;
+  } else {
+    std::cout << "NOT THE SAME!!!! lhs address: " << &lhs << ", rhs address: " << &rhs << std::endl;
+  }
+
+  std::cout << "0000 l/r|hs.getNumberOfFunctions(): " << lhs.getNumberOfFunctions() << " :: " << rhs.getNumberOfFunctions() << "\n";
+
   if (lhs.getNumberOfFunctions() != rhs.getNumberOfFunctions())
     return false;
+
+  std::cout << "111111111111111\n";
 
   for (size_t i = 0; i < lhs.getNumberOfFunctions(); i++) {
 
     void *currFunc1 = lhs.getFunction(i);
-    void *currFunc2 = lhs.getFunction(i);
+    void *currFunc2 = rhs.getFunction(i);
 
     std::string funcName1 = lhs.getFunctionName(currFunc1);
     std::uint32_t nparams1 = lhs.getFunctionNparams(currFunc1, funcName1.size() + INSTRUCTION_SIZE);
@@ -385,20 +389,21 @@ inline bool operator==(ModuleMmap& lhs, ModuleMmap& rhs) {
 
     if (funcName1 != funcName2 || nparams1 != nparams2 || nlocals1 != nlocals2 || instructionCount1 != instructionCount2)
       return false;
-
     instruction_type *instruction1 = lhs.getCurrentInstruction(currFunc1, funcName1.size() + INSTRUCTION_SIZE*4);
     instruction_type *instruction2 = rhs.getCurrentInstruction(currFunc2, funcName2.size() + INSTRUCTION_SIZE*4);
 
     for (size_t j = 0; j < instructionCount1; j++) {
       const Instruction *instructionPointer1 = (const Instruction *)instruction1;
       const Instruction *instructionPointer2 = (const Instruction *)instruction2;
-      if (*instructionPointer1 != *instructionPointer2)
+      if (*instruction1 != *instruction2)
         return false;
       
       instruction1++;
       instruction2++;
     }
   }
+
+  std::cout << "2222222222\n";
 
   // Make sure string sections match each other
   if (lhs.hasStringSection() != rhs.hasStringSection())
@@ -417,6 +422,7 @@ inline bool operator==(ModuleMmap& lhs, ModuleMmap& rhs) {
     for (size_t i = 0; i < strCount1; i++) {
       const char *currStr1 = lhs.getString(i);
       const char *currStr2 = rhs.getString(i);
+      std::cout << "##currStr1::2## :: " << currStr1 << " :: " << currStr2 << "\n";
       if (strcmp(currStr1, currStr2) != 0)
         return false;
     }

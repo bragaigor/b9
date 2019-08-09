@@ -19,6 +19,7 @@ void readStringSection(std::istream &in, std::vector<std::string> &strings, std:
   for (uint32_t i = 0; i < stringCount; i++) {
     std::string toRead;
     readString(in, toRead);
+    std::cout << "!!!!!!!!!!!!!!!!!! String read: " << toRead << " did it work??????\n";
     strings.push_back(toRead);
     moduleMmap->insertStringSection(toRead, i);
   }
@@ -91,6 +92,7 @@ void readSection(std::istream &in, std::shared_ptr<Module> &module, std::shared_
     case 1:
       return readFunctionSection(in, module->functions, moduleMmap);
     case 2:
+      std::cout << "About to deserialize stringSection!!!!!!!\n";
       return readStringSection(in, module->strings, moduleMmap);
     default:
       throw DeserializeException{"Invalid Section Code"};
@@ -133,12 +135,15 @@ std::shared_ptr<Module> deserialize(std::istream &in, std::shared_ptr<ModuleMmap
   std::uint32_t moduleSize = readModuleSize(in);
   auto moduleMmap2 = std::make_shared<ModuleMmap>(moduleSize);
 
+  std::cout << "############## moduleMmap22222->getNumberOfFunctions() " << moduleMmap2->getNumberOfFunctions() << std::endl;
+
   readHeader(in);
   while (in.peek() != std::istream::traits_type::eof()) {
     readSection(in, module, moduleMmap2);
   }
 
   moduleMmap = moduleMmap2;
+  std::cout << "############## moduleMmap->getNumberOfFunctions() " << moduleMmap->getNumberOfFunctions() << std::endl;
   return module;
 }
 
