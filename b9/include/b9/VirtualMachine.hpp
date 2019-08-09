@@ -72,6 +72,8 @@ class VirtualMachine {
   /// Load a module into the VM.
   void load(std::shared_ptr<const Module> module);
 
+  void load2(const char* moduleName);
+
   StackElement run(const std::size_t index,
                    const std::vector<StackElement> &usrArgs);
 
@@ -112,6 +114,7 @@ class VirtualMachine {
   Om::MemorySystem memoryManager_;
   std::shared_ptr<Compiler> compiler_;
   std::shared_ptr<const Module> module_;
+  std::shared_ptr<const Module2> module2_;
   std::vector<JitFunction> compiledFunctions_;
 };
 

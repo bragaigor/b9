@@ -50,6 +50,11 @@ void VirtualMachine::load(std::shared_ptr<const Module> module) {
   compiledFunctions_.reserve(getFunctionCount());
 }
 
+void VirtualMachine::load2(const char* moduleName) {
+  module2_ = std::make_shared<Module2>(map_file(moduleName));
+  compiledFunctions_.reserve(getFunctionCount());
+}
+
 /// OpCode Interpreter
 
 JitFunction VirtualMachine::getJitAddress(std::size_t functionIndex) {
@@ -87,6 +92,7 @@ const std::string &VirtualMachine::getString(int index) {
   return module_->strings[index];
 }
 
+// TODO: Make it use the new module
 std::size_t VirtualMachine::getFunctionCount() {
   return module_->functions.size();
 }

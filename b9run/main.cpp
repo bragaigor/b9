@@ -123,6 +123,7 @@ static void run(Om::ProcessRuntime& runtime, const RunConfig& cfg) {
   std::ifstream file(cfg.moduleName, std::ios_base::in | std::ios_base::binary);
   auto module = b9::deserialize(file);
   vm.load(module);
+  vm.load2(cfg.moduleName);
 
   if (cfg.b9.jit) {
     vm.generateAllCode();
