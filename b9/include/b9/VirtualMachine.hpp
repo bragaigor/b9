@@ -82,6 +82,8 @@ class VirtualMachine {
 
   const FunctionDef *getFunction(std::size_t index);
 
+  const FunctionDef *getFunction2(std::size_t index);
+
   PrimitiveFunction *getPrimitive(std::size_t index);
 
   JitFunction getJitAddress(std::size_t functionIndex);

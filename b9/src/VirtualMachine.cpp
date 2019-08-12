@@ -51,7 +51,8 @@ void VirtualMachine::load(std::shared_ptr<const Module> module) {
 }
 
 void VirtualMachine::load2(const char* moduleName) {
-  module2_ = std::make_shared<Module2>(map_file(moduleName));
+  module2_ = load_module(moduleName);
+  // module2_ = std::make_shared<Module2>(mmap_file(moduleName));
   compiledFunctions_.reserve(getFunctionCount());
 }
 
@@ -75,6 +76,10 @@ PrimitiveFunction *VirtualMachine::getPrimitive(std::size_t index) {
 
 const FunctionDef *VirtualMachine::getFunction(std::size_t index) {
   return &module_->functions[index];
+}
+
+const FunctionDef *VirtualMachine::getFunction2(std::size_t index) {
+  return &module2_->functions_[index];
 }
 
 JitFunction VirtualMachine::generateCode(const std::size_t functionIndex) {
@@ -119,9 +124,16 @@ StackElement VirtualMachine::run(const std::string &name,
 StackElement VirtualMachine::run(const std::size_t functionIndex,
                                  const std::vector<StackElement> &usrArgs) {
   auto function = getFunction(functionIndex);
+  auto function2 = getFunction2(functionIndex);
+
   auto paramsCount = function->nparams;
 
   ExecutionContext *executionContext = new ExecutionContext(*this, cfg_);
+
+  std::cout << "The following must match:\n";
+  std::cout << function->name << " :: " << function2->name << " | " 
+            << function->nparams << " :: " << function2->nparams << " | " 
+            << function->nlocals << " :: " << function2->nlocals << std::endl;
 
   if (cfg_.verbose) {
     std::cout << "+++++++++++++++++++++++" << std::endl;

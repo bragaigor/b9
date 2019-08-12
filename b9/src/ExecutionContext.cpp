@@ -81,6 +81,7 @@ Om::Value ExecutionContext::callJitFunction(JitFunction jitFunction,
 
 StackElement ExecutionContext::interpret(const std::size_t functionIndex) {
   auto function = virtualMachine_->getFunction(functionIndex);
+  auto function2 = virtualMachine_->getFunction2(functionIndex);
   auto paramsCount = function->nparams;
   auto localsCount = function->nlocals;
   auto jitFunction = virtualMachine_->getJitAddress(functionIndex);
@@ -95,7 +96,8 @@ StackElement ExecutionContext::interpret(const std::size_t functionIndex) {
   }
 
   // interpret the method otherwise
-  const Instruction *instructionPointer = function->instructions.data();
+  // const Instruction *instructionPointer = function->instructions.data();
+  const Instruction *instructionPointer = (const Instruction *)function2->instructionsAddr;
 
   StackElement *params = stack_.top() - paramsCount;
 

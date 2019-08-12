@@ -23,6 +23,18 @@ class Compiler;
 class ExecutionContext;
 class VirtualMachine;
 
+// Function Definition
+
+struct FunctionDef {
+  std::string name;
+  std::vector<Instruction> instructions;
+  void *instructionsAddr;
+  std::uint32_t nparams;
+  std::uint32_t nlocals;
+};
+
+/// Move-only file-descriptor manager.
+/// When this object goes out of scope, the file will be closed.
 class FdHandle {
 public:
     constexpr FdHandle() : value_(-1) {}
@@ -45,7 +57,7 @@ public:
     constexpr operator int() const { return value_; }
 
     /// Move ownership of a fd from another handle to this handle.
-    /// If this handle has a valid fd, close it.
+    /// If this handle already has a valid fd, close it.
     FdHandle& operator=(FdHandle&& other) {
         reset(other.release());
         return *this;
@@ -81,6 +93,27 @@ public:
 private:
 	int value_;
 };
+
+inline FdHandle open_fd(const char* filename) {
+  	FdHandle fd(open(filename, O_RDONLY));
+  	if (fd == -1) {
+      throw std::runtime_error(std::string("failed to open module: ") + filename);
+    }
+    return fd;
+}
+
+inline FdHandle open_fd(const std::string& filename) {
+    return open_fd(filename.c_str());
+}
+
+inline std::size_t file_size(int fd) {
+    struct stat s;
+  	int error = fstat(fd, &s);
+	if (error != 0) {
+      throw std::runtime_error("failed to stat fd");
+    }
+    return std::size_t(s.st_size);
+}
 
 /// Move-only owner of an mmap region.
 /// When the object goes out of scope, the mmapped region will be freed.
@@ -137,27 +170,24 @@ private:
     std::size_t size_;
 };
 
-inline MMapHandle map_file(const char* filename) {
-  	FdHandle fd(open(filename, O_RDONLY));
-  	if (fd == -1) {
-      throw std::runtime_error(std::string("failed to open module: ") + filename);
-    }
-
-  	struct stat s;
-  	int error = fstat(fd, &s);
-	if (error != 0) {
-      throw std::runtime_error(std::string("failed to stat module: ") + filename);
-    }
-    auto size = std::size_t(s.st_size);
-
+inline MMapHandle mmap_file(int fd, std::size_t size) {
     void* addr = mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (addr == MAP_FAILED) {
-      throw std::runtime_error(std::string("failed to mmap module: ") + filename);
+      throw std::runtime_error("failed to mmap file");
     }
+    return MMapHandle(addr, size);
+}
 
-  std::cout << "fd: " << fd << ", size: " << size << ", addr: " << addr << std::endl;
+inline MMapHandle mmap_file(int fd) {
+    return mmap_file(fd, file_size(fd));
+}
 
-	return { addr, size };
+inline MMapHandle mmap_file(const char* filename) {
+    return mmap_file(open_fd(filename));
+}
+
+inline MMapHandle mmap_file(const std::string& filename) {
+    return mmap_file(filename.c_str());
 }
 
 class Module2 {
@@ -191,22 +221,39 @@ public:
       std::cout << "Found " << functionCount << " functions in program.\n";
 
       addrs_.reserve(functionCount);
+      functions_.reserve(functionCount);
 
       if (functionCount > 0) {
         for (size_t i = 0; i < functionCount; i++) {
+
+          struct FunctionDef funcDef;
+
           addrs_.push_back(addr);
           std::uint32_t funcNameLength = *((std::uint32_t*)(addr));
           addr = static_cast<std::uint32_t*>(addr) + 1;
+          std::string funcName;
           //******************************************************************************************
           std::cout << "Function len: " << funcNameLength << ", name: ";
           char* strChar2 = (char*)addr;
           for (size_t j = 0; j < funcNameLength; j++) {
             std::cout << strChar2[j];
+            funcName.push_back(strChar2[j]);
           }
           std::cout << std::endl;
           //******************************************************************************************
+          funcDef.name = funcName;
           addr = static_cast<char*>(addr) + funcNameLength;
-          addr = static_cast<std::uint32_t*>(addr) + 2; // Jump nparams and nlocals
+
+          std::uint32_t nparams = *((std::uint32_t*)(addr));
+          addr = static_cast<std::uint32_t*>(addr) + 1; // Jump nparams and nlocals
+          std::uint32_t nlocals = *((std::uint32_t*)(addr));
+          addr = static_cast<std::uint32_t*>(addr) + 1;
+
+          funcDef.nparams = nparams;
+          funcDef.nlocals = nlocals;
+          funcDef.instructionsAddr = addr;
+
+          functions_.push_back(funcDef);
 
           std::uint32_t *curInst = ((std::uint32_t *)addr);
           const Instruction *instructionPointer = (const Instruction *)curInst;
@@ -219,6 +266,10 @@ public:
           addr = static_cast<std::uint32_t*>(addr) + 1;
           std::cout << "There were " << count << " instructions in this last function.\n";
         }
+      }
+
+      for (FunctionDef f : functions_) {
+        std::cout << "Function name: " << f.name << ", addr: " << f.instructionsAddr << std::endl;
       }
 
       std::uint32_t strSection = *((std::uint32_t*)(addr));
@@ -238,6 +289,7 @@ public:
 
       if (strCount > 0) {
         for (size_t i = 0; i < strCount; i++) {
+          // TODO: Can we read into a string_view??
           std::string toRead;
           std::uint32_t strLen = *((std::uint32_t*)(addr));
           addr = static_cast<std::uint32_t*>(addr) + 1;
@@ -245,6 +297,7 @@ public:
           for (size_t i = 0; i < strLen; i++) {
             toRead.push_back(strChar[i]);
           }
+          // std::string_view largeString{toRead.c_str(), toRead.size()};
           strings_.push_back(toRead);
           addr = static_cast<char*>(addr) + strLen;
         }
@@ -264,7 +317,11 @@ public:
     }
 
     std::string getString(int index) const {
-      return strings_[index];
+      return std::string(strings_[index]);
+    }
+
+    std::vector<FunctionDef> getFunctions() {
+      return functions_;
     }
 
     static bool isSameFunction(void* funcAddr1, void* funcAddr2) {
@@ -320,19 +377,42 @@ public:
       return true;
     }
 
+    std::uint32_t getNparams(size_t index) {
+      void *addr = advancePtr(index);
+
+      return *((std::uint32_t*)(addr));
+    }
+
+    std::uint32_t getNlocals(size_t index) {
+      void *addr = advancePtr(index);
+      addr = static_cast<std::uint32_t*>(addr) + 1;
+
+      return *((std::uint32_t*)(addr));
+    }
+
+    void *getInstructionPtr(size_t index) {
+      void *addr = advancePtr(index);
+      addr = static_cast<std::uint32_t*>(addr) + 2;
+
+      return addr;
+    }
+
+    std::vector<FunctionDef> functions_;
+
 private:
+
+    void *advancePtr(size_t index) {
+      void *addr = addrs_[index];
+      std::uint32_t funcNameLength = *((std::uint32_t*)(addr));
+      addr = static_cast<std::uint32_t*>(addr) + 1;
+      addr = static_cast<char*>(addr) + funcNameLength;
+
+      return addr;
+    }
+
     MMapHandle data_;
     std::vector<void*> addrs_;
-    std::vector<std::string> strings_;
-};
-
-// Function Definition
-
-struct FunctionDef {
-  std::string name;
-  std::vector<Instruction> instructions;
-  std::uint32_t nparams;
-  std::uint32_t nlocals;
+    std::vector<std::string_view> strings_;
 };
 
 inline void operator<<(std::ostream& out, const FunctionDef& f) {
@@ -423,6 +503,10 @@ inline bool operator==(const Module2& lhs, const Module2& rhs) {
   }
 
   return true;
+}
+
+inline std::shared_ptr<Module2> load_module(const char* filename) {
+    return std::make_shared<Module2>(mmap_file(filename));
 }
 
 
